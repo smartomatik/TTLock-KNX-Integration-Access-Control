@@ -12,7 +12,7 @@
 | **Most do KNX** | Node-RED z węzłami knx-ultimate na małym komputerze w obiekcie oraz interfejs KNX IP (najlepiej Secure). Odbiera callback, mapuje osobę na wyzwalacz i scenę, zapisuje adresy grup. |
 | **Warunki konieczne** | Bramka (SX Wi-Fi lub TTLock G2/G6) w zasięgu Bluetooth czytnika. Zatwierdzona aplikacja TTLock Open Platform (darmowa). Publiczny adres HTTPS na porcie 443. |
 | **Opóźnienie** | TTLock określa je jako „quasi-real-time”, bez podanej wartości. Oczekuj kilku sekund. **Zmierz na obiekcie**, zanim obiecasz klientowi „światło w chwili otwarcia”. |
-| **Koszt sprzętu (orientacyjnie)** | ok. 450–600 € plus robocizna: komputer 100–150 €, interfejs KNX IP Secure 180–280 €, Cloudflare Tunnel za darmo, bramka (jeśli jej brak). |
+| **Koszt sprzętu (orientacyjnie)** | ok. 450–600 € plus robocizna: komputer 100–150 €, interfejs KNX IP Secure 180–280 €, publiczny adres HTTPS za darmo (Cloudflare Tunnel lub Tailscale Funnel), bramka (jeśli jej brak). |
 
 ---
 
@@ -33,7 +33,7 @@ System SX działa na platformie TTLock. Instrukcja API SX to TTLock Cloud API v3
 ## 2. Architektura
 
 ```
-Czytnik UL ─BLE─► Bramka ─Wi-Fi─► Chmura TTLock EU ─HTTPS POST─► Cloudflare Tunnel ─► Node-RED ─KNX IP Secure─► KNX
+Czytnik UL ─BLE─► Bramka ─Wi-Fi─► Chmura TTLock EU ─HTTPS POST─► Cloudflare Tunnel / Tailscale Funnel / przekierowanie portów ─► Node-RED ─KNX IP Secure─► KNX
 ```
 
 Kierunek jest **tylko zamek → KNX**. Nic po stronie KNX nie może otwierać drzwi.

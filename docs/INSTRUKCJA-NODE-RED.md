@@ -9,7 +9,7 @@ Czas pracy to około 2–3 godziny, nie licząc oczekiwania na zatwierdzenie kon
 | A. Przygotowanie (biuro) | 1 Konto deweloperskie · 2 Nazwy w aplikacji · 3 Test API |
 | B. ETS | 4 Adresy grup i sceny |
 | C. Node-RED (obiekt) | 5 Instalacja · 6 Hasło · 7 knx-ultimate · 8 Import flow · 9 Interfejs KNX · 10 Konfiguracja osób · 11 Test lokalny |
-| D. Połączenie z chmurą | 12 Sekretny adres · 13 Cloudflare Tunnel · 14 Callback URL w TTLock · 15 Test z drzwi |
+| D. Połączenie z chmurą | 12 Sekretny adres · 13 Publiczny adres HTTPS (Cloudflare / Tailscale / przekierowanie portów) · 14 Callback URL w TTLock · 15 Test z drzwi |
 | E. Przekazanie | 16 Obsługa na co dzień · 17 Rozwiązywanie problemów |
 
 ---
@@ -22,7 +22,10 @@ Czas pracy to około 2–3 godziny, nie licząc oczekiwania na zatwierdzenie kon
 - [ ] Komputer 24/7 w sieci LAN obiektu, np. Raspberry Pi 4/5 (2 GB+), NAS z Dockerem albo mini PC z Linuxem
 - [ ] **Interfejs KNX IP** z wolnym tunelem, najlepiej KNX IP Secure (np. MDT SCN-IP100.03, Weinzierl 732)
 - [ ] Projekt **ETS** obiektu
-- [ ] Konto **Cloudflare** (darmowe) z domeną, np. klienta lub instalatora
+- [ ] Jeden sposób na publiczny adres HTTPS (krok 13):
+  - darmowe konto **Cloudflare** z domeną, **albo**
+  - darmowe konto **Tailscale** (bez domeny), **albo**
+  - publiczny adres IPv4 z możliwością przekierowania portów w routerze
 
 ---
 
@@ -226,8 +229,18 @@ openssl rand -hex 16
 ```
 Kliknij dwukrotnie węzeł **Callback TTLock (POST)** i zmień URL z `/ttlock/zmien-ten-sekret` na `/ttlock/<twój-sekret>`. Kliknij **Deploy**.
 
-### Krok 13 – Cloudflare Tunnel (stały adres HTTPS, bez otwierania portów)
-TTLock wymaga publicznego adresu `https://` na porcie 443 z ważnym certyfikatem. Cloudflare Tunnel zapewnia go bez przekierowania portów na routerze.
+### Krok 13 – Publiczny adres HTTPS (wybierz jeden wariant)
+TTLock wymaga publicznego adresu `https://` na porcie 443 z ważnym certyfikatem. Flow Node-RED jest taki sam we wszystkich wariantach. Zmienia się tylko sposób udostępnienia adresu.
+
+| Wariant | Kiedy wybrać | Potrzebne | Zmiany w routerze |
+|---|---|---|---|
+| **13A Cloudflare Tunnel** | Ty lub klient macie domenę w Cloudflare | Darmowe konto Cloudflare i domena | brak |
+| **13B Tailscale Funnel** | Brak domeny, najmniej kroków | Darmowe konto Tailscale | brak |
+| **13C Przekierowanie portów** | Klient nie chce zewnętrznych usług tunelowych | Publiczny adres IPv4, DDNS, reverse proxy z certyfikatem | porty 80 i 443 |
+
+We wszystkich wariantach **na zewnątrz ma być widoczna tylko ścieżka `/ttlock/…`**. Edytor Node-RED (port 1880) nigdy nie może być dostępny z internetu.
+
+#### 13A – Cloudflare Tunnel
 
 1. Zaloguj się na **dash.cloudflare.com** (domena musi być w Cloudflare) → **Zero Trust → Networks → Tunnels** → **Create a tunnel** → **Cloudflared** → nazwa, np. `dom-kowalskich`.
 2. Zainstaluj konektor. Cloudflare pokaże polecenie z tokenem.
@@ -248,9 +261,125 @@ TTLock wymaga publicznego adresu `https://` na porcie 443 z ważnym certyfikatem
      ```
      Odpowiedź: `success` ✔
 
+Twój adres callbacku: `https://drzwi.twojadomena.pl/ttlock/<twój-sekret>`
+
+#### 13B – Tailscale Funnel (bez domeny i bez zmian w routerze)
+Tailscale Funnel udostępnia wybraną ścieżkę z komputera pod stałym adresem `https://<nazwa>.<twoja-sieć>.ts.net`. Certyfikat HTTPS jest tworzony automatycznie. Funnel jest dostępny w darmowym planie Personal.
+
+1. Załóż konto na **https://login.tailscale.com** (logowanie np. kontem Google lub Microsoft).
+2. Na Raspberry Pi lub serwerze z Node-RED zainstaluj Tailscale:
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh
+   ```
+   ```bash
+   sudo tailscale up
+   ```
+   Otwórz wyświetlony link i zaloguj się, aby dodać urządzenie do swojej sieci Tailscale.
+   - **Docker:** zainstaluj Tailscale na komputerze-gospodarzu (nie w kontenerze). Node-RED działa w sieci hosta, więc jest dostępny pod `127.0.0.1:1880`. Usługi `cloudflared` nie uruchamiaj.
+3. Nadaj urządzeniu czytelną nazwę (będzie częścią adresu):
+   ```bash
+   sudo tailscale set --hostname=dom-kowalskich
+   ```
+4. Udostępnij **tylko ścieżkę `/ttlock`**:
+   ```bash
+   sudo tailscale funnel --bg --set-path=/ttlock http://127.0.0.1:1880/ttlock
+   ```
+   Przy pierwszym uruchomieniu polecenie wyświetli link do włączenia Funnel, HTTPS i MagicDNS w panelu Tailscale. Otwórz go, zatwierdź i uruchom polecenie ponownie.
+5. Sprawdź adres i konfigurację:
+   ```bash
+   tailscale funnel status
+   ```
+   Adres ma postać `https://dom-kowalskich.tail1234.ts.net`. Nowy adres może potrzebować do 10 minut, zanim zacznie działać w DNS.
+6. **Wyłącz wygasanie klucza urządzenia.** Domyślnie urządzenie wylogowuje się po 180 dniach i Funnel przestaje działać. W panelu **login.tailscale.com → Machines → dom-kowalskich → ⋯ → Disable key expiry**.
+7. Sprawdź z telefonu na danych komórkowych lub z komputera spoza sieci obiektu:
+   - `https://dom-kowalskich.tail1234.ts.net/` → brak strony lub błąd (edytor niewidoczny ✔)
+   - test callbacku:
+     ```bash
+     curl -X POST https://dom-kowalskich.tail1234.ts.net/ttlock/<twój-sekret> -d "lockId=1&notifyType=1&records=[]"
+     ```
+     Odpowiedź: `success` ✔
+   - **Jeśli dostajesz 404**, Tailscale mógł przekazać ścieżkę bez prefiksu. Usuń regułę i dodaj ją bez `/ttlock` na końcu celu, a potem powtórz test:
+     ```bash
+     sudo tailscale funnel reset
+     ```
+     ```bash
+     sudo tailscale funnel --bg --set-path=/ttlock http://127.0.0.1:1880
+     ```
+
+Twój adres callbacku: `https://dom-kowalskich.tail1234.ts.net/ttlock/<twój-sekret>`
+
+Wyłączenie Funnel w razie potrzeby: `sudo tailscale funnel reset`.
+
+#### 13C – Przekierowanie portów na routerze (bez usług zewnętrznych)
+Wymaga więcej pracy i otwartych portów w routerze klienta. Wybierz ten wariant tylko wtedy, gdy klient nie zgadza się na Cloudflare ani Tailscale.
+
+**1. Sprawdź, czy łącze ma publiczny adres IPv4.**
+Porównaj adres WAN w panelu routera z adresem pokazanym przez https://ifconfig.me (otwórz go z komputera w sieci obiektu).
+- **Adresy są takie same:** można kontynuować.
+- **Adresy różnią się**, albo adres WAN zaczyna się od `100.64.`–`100.127.`, `10.`, `172.16.`–`172.31.` lub `192.168.`: łącze jest za CGNAT i przekierowanie **nie zadziała**. Poproś operatora o publiczny adres IP (często płatny) albo wybierz 13A lub 13B.
+
+**2. Stały adres IP komputera z Node-RED.**
+W routerze ustaw rezerwację DHCP (stały adres), np. `192.168.1.20`.
+
+**3. Nazwa domenowa (DDNS).**
+Publiczny adres domowy zwykle się zmienia, więc potrzebna jest nazwa, która za nim podąża.
+- Wbudowane DDNS w routerze, np. MyFRITZ!, ASUS DDNS, TP-Link DDNS, jeśli jest dostępne.
+- Albo darmowe **DuckDNS**:
+  1. Zaloguj się na https://www.duckdns.org i utwórz nazwę, np. `dom-kowalskich` → adres `dom-kowalskich.duckdns.org`.
+  2. Na komputerze z Node-RED dodaj automatyczną aktualizację co 5 minut (`crontab -e`) i wklej jedną linię z Twoim tokenem z DuckDNS:
+     ```
+     */5 * * * * curl -s "https://www.duckdns.org/update?domains=dom-kowalskich&token=TWOJ-TOKEN&ip=" >/dev/null
+     ```
+
+**4. Reverse proxy z automatycznym certyfikatem (Caddy).**
+Caddy sam pobiera i odnawia certyfikat Let's Encrypt.
+1. Zainstaluj Caddy:
+   ```bash
+   sudo apt install -y caddy
+   ```
+2. Otwórz plik `/etc/caddy/Caddyfile`, zastąp całą zawartość poniższą i wpisz swoją nazwę domeny:
+   ```
+   dom-kowalskich.duckdns.org {
+       handle /ttlock/* {
+           reverse_proxy 127.0.0.1:1880
+       }
+       respond 404
+   }
+   ```
+   Tylko ścieżka `/ttlock/…` trafia do Node-RED. Wszystko inne zwraca 404.
+3. Przeładuj Caddy:
+   ```bash
+   sudo systemctl reload caddy
+   ```
+- **Docker:** zainstaluj Caddy na komputerze-gospodarzu tak samo. Usługi `cloudflared` nie uruchamiaj.
+
+**5. Przekierowanie portów w routerze.**
+Przekieruj do komputera z Node-RED (np. `192.168.1.20`):
+
+| Port zewnętrzny | Port wewnętrzny | Protokół | Po co |
+|---|---|---|---|
+| 443 | 443 | TCP | HTTPS dla TTLock |
+| 80 | 80 | TCP | wydawanie i odnawianie certyfikatu Let's Encrypt |
+
+**Nigdy nie przekierowuj portu 1880** (edytor Node-RED).
+
+**6. Test** z telefonu na danych komórkowych (poza siecią obiektu):
+- `https://dom-kowalskich.duckdns.org/` → **404** ✔
+- test callbacku:
+  ```bash
+  curl -X POST https://dom-kowalskich.duckdns.org/ttlock/<twój-sekret> -d "lockId=1&notifyType=1&records=[]"
+  ```
+  Odpowiedź: `success` ✔
+
+Twój adres callbacku: `https://dom-kowalskich.duckdns.org/ttlock/<twój-sekret>`
+
+Utrzymanie: aktualizuj system komputera (`sudo apt update && sudo apt upgrade`), bo port 443 jest otwarty na internet. Jeśli operator zmieni adres na CGNAT, przejdź na wariant 13A lub 13B.
+
 ### Krok 14 – Callback URL w TTLock
-1. **https://euopen.ttlock.com/manager** → Twoja aplikacja → szczegóły → **Callback URL**:
-   `https://drzwi.twojadomena.pl/ttlock/<twój-sekret>`
+1. **https://euopen.ttlock.com/manager** → Twoja aplikacja → szczegóły → **Callback URL**: wklej adres z kroku 13, np.:
+   - 13A: `https://drzwi.twojadomena.pl/ttlock/<twój-sekret>`
+   - 13B: `https://dom-kowalskich.tail1234.ts.net/ttlock/<twój-sekret>`
+   - 13C: `https://dom-kowalskich.duckdns.org/ttlock/<twój-sekret>`
 2. Zapisz.
 3. Upewnij się, że administrator zamka zalogował się przez Twój clientId (krok 3). Bez tego chmura nie wyśle zdarzeń.
 
@@ -284,7 +413,9 @@ Na koniec wpisz **lockId** w KONFIGURACJI (jeśli jeszcze go nie ma) i kliknij *
 | Objaw | Przyczyna / rozwiązanie |
 |---|---|
 | Nic nie przychodzi w Debug po otwarciu drzwi | Sprawdź po kolei: bramka online w aplikacji? Rekord widoczny w aplikacji? Callback URL zapisany w euopen? Administrator zalogowany Twoim clientId (krok 3)? Czy inna integracja nie przejęła callbacków? |
-| `curl` na adres zwraca 404 | Ścieżka w węźle „Callback TTLock” różni się od adresu, albo reguła Path w Cloudflare jest błędna. |
+| `curl` na adres zwraca 404 | Ścieżka w węźle „Callback TTLock” różni się od adresu. Albo błędna reguła: Path w Cloudflare (13A), cel `--set-path` w Tailscale (13B, patrz wariant zapasowy) lub blok `handle` w Caddyfile (13C). |
+| Tailscale: adres przestał działać po kilku miesiącach | Wygasł klucz urządzenia. Zaloguj ponownie (`sudo tailscale up`) i wyłącz wygasanie klucza (13B, pkt 6). |
+| Przekierowanie portów: brak certyfikatu lub przekroczony czas połączenia | Port 80/443 nie jest przekierowany, DDNS wskazuje stary adres albo łącze jest za CGNAT (13C, pkt 1). |
 | `nieznana osoba "xyz"` | Dodaj klucz `xyz` w KONFIGURACJI albo popraw nazwę w aplikacji. |
 | `rekord zbyt stary` | Bramka była offline i wysłała zaległe zdarzenia. To zamierzone zachowanie. Zwiększ `maksWiekMinut`, jeśli trzeba. |
 | `automatyka wyłączona z KNX` | GA 7/4/0 = 0. Włącz automatykę. |
@@ -298,6 +429,6 @@ Na koniec wpisz **lockId** w KONFIGURACJI (jeśli jeszcze go nie ma) i kliknij *
 
 - **Tylko zamek → KNX.** Nie dodawaj do tego flow żadnej funkcji otwierającej drzwi.
 - **Nie rozbrajaj alarmu** na podstawie otwarcia. Co najwyżej wyślij powiadomienie. Dotyczy to też kodów przekazywanych dalej i otwarć siłowych.
-- Edytor Node-RED **tylko z hasłem** (krok 6) i **niedostępny z internetu** (reguła Path w kroku 13).
+- Edytor Node-RED **tylko z hasłem** (krok 6) i **niedostępny z internetu** (tylko ścieżka `/ttlock/…` jest publiczna – krok 13).
 - **Sekret w adresie** traktuj jak hasło.
 - **RODO:** w domu prywatnym ma zastosowanie wyłączenie domowe. W wynajmie, biurze lub przy zatrudnionych osobach (sprzątanie, opieka) właściciel staje się administratorem danych: potrzebna jest informacja dla osób, ograniczony czas przechowywania i minimalizacja danych. Na KNX wysyłaj tylko imiona. Log Node-RED nie zawiera kodów PIN, bo są maskowane.

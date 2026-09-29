@@ -10,7 +10,8 @@ Instalator edytuje jedną tabelę „osoba → scena” w przeglądarce.
 Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Chmura TTLock EU
                                                                │ HTTPS POST (callback)
                                                                ▼
-                           Cloudflare Tunnel ──► Node-RED ──KNX IP (Secure)──► magistrala KNX
+    Cloudflare Tunnel / Tailscale Funnel /
+           przekierowanie portów + Caddy ──► Node-RED ──KNX IP (Secure)──► magistrala KNX
                                                  osoba 1–10          7/3/1…7/3/10 wyzwalacz osoby (DPT 1.001)
                                                                      7/1/0 scena osoby (DPT 18.001)
                                                                      7/2/0 „Ostatnio otworzył” (DPT 16.001)
@@ -31,7 +32,7 @@ Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Ch
 |---|---|
 | [docs/INSTRUKCJA-NODE-RED.md](docs/INSTRUKCJA-NODE-RED.md) | **Instrukcja krok po kroku dla instalatora** – zacznij tutaj |
 | [node-red/flow-ttlock-knx.json](node-red/flow-ttlock-knx.json) | Gotowy flow do zaimportowania w Node-RED |
-| [node-red/docker-compose.yml](node-red/docker-compose.yml) | Node-RED i Cloudflare Tunnel w Dockerze (opcjonalnie) |
+| [node-red/docker-compose.yml](node-red/docker-compose.yml) | Node-RED i opcjonalnie Cloudflare Tunnel w Dockerze |
 | [tools/ttlock_test.py](tools/ttlock_test.py) | Skrypt testowy: logowanie do API, lista zamków, odcisków i rekordów, lokalny odbiornik callbacków |
 | [docs/TEST-API.md](docs/TEST-API.md) | Jak sprawdzić, czy API zwraca osobę, zanim cokolwiek zainstalujesz |
 | [docs/RAPORT.md](docs/RAPORT.md) | Raport wykonalności: dane z zamka, ograniczenia, porównanie rozwiązań KNX, bezpieczeństwo, RODO |
@@ -43,7 +44,10 @@ Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Ch
 - Konto deweloperskie **TTLock Open Platform** (euopen.ttlock.com, darmowe, zatwierdzane ręcznie w kilka dni roboczych)
 - Komputer pracujący 24/7 w sieci obiektu: Raspberry Pi, NAS z Dockerem lub mini PC
 - Interfejs **KNX IP** z tunelowaniem, najlepiej z KNX IP Secure (np. MDT SCN-IP100.03)
-- Bezpłatne konto **Cloudflare** z domeną, potrzebne do stałego adresu HTTPS bez przekierowania portów
+- Publiczny adres HTTPS dla callbacku, do wyboru:
+  - **Cloudflare Tunnel** (darmowe konto i domena),
+  - **Tailscale Funnel** (darmowe konto, bez domeny),
+  - **przekierowanie portów** w routerze (wymaga publicznego IPv4).
 
 ## Ważne
 
