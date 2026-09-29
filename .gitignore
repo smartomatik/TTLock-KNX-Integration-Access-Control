@@ -1,0 +1,6 @@
+# dane lokalne i sekrety
+node-red/data/
+node-red/.env
+*.knxkeys
+__pycache__/
+.DS_Store

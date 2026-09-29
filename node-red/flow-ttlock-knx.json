@@ -1,0 +1,976 @@
+[
+  {
+    "id": "ttknx_tab0000001",
+    "type": "tab",
+    "label": "TTLock → KNX",
+    "disabled": false,
+    "info": "Scena przyjścia KNX zależna od osoby, która otworzyła drzwi (callback TTLock).\nInstrukcja: docs/INSTRUKCJA-NODE-RED.md"
+  },
+  {
+    "id": "ttknx_cmt0000001",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "① KONFIGURACJA – edytuj węzeł „⚙ KONFIGURACJA” (osoby, sceny, lockId)",
+    "info": "Kliknij dwukrotnie węzeł ⚙ KONFIGURACJA i zmień listę osób.\nPo zmianie kliknij Deploy.",
+    "x": 330,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ttknx_inj_cfg001",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "Wczytaj konfigurację",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.5,
+    "topic": "",
+    "x": 150,
+    "y": 80,
+    "wires": [
+      [
+        "ttknx_fn_config01"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_fn_config01",
+    "type": "function",
+    "z": "ttknx_tab0000001",
+    "name": "⚙ KONFIGURACJA",
+    "func": "// =====================================================================\n//  KONFIGURACJA – to jedyne miejsce, które instalator musi edytować.\n//  Po zmianie: kliknij \"Done\", a potem \"Deploy\".\n// =====================================================================\nconst config = {\n    // ID zamka w chmurze TTLock (odczytasz go skryptem tools/ttlock_test.py).\n    // Puste '' = akceptuj każdy zamek – TYLKO na czas testów!\n    lockId: '',\n\n    // Rekord starszy niż tyle minut nie uruchomi automatyki\n    // (np. bramka była offline i wysłała zaległe zdarzenia).\n    maksWiekMinut: 5,\n\n    // Typy otwarcia, które uruchamiają automatykę:\n    //  8 = odcisk palca, 4 = kod PIN, 7 = karta/brelok RFID, 55 = pilot\n    //  1 = aplikacja (eKey), 12 = zdalnie przez bramkę – dodaj dopiero po teście\n    typyPrzyjscia: [8, 4, 7, 55],\n\n    // 10 miejsc na osoby. Numer miejsca = adres wyzwalacza KNX 7/3/<nr>.\n    //   klucz: PIERWSZE SŁOWO nazwy odcisku/karty/kodu w aplikacji,\n    //          małymi literami, bez polskich znaków (\"Łukasz - kciuk\" -> 'lukasz').\n    //          Puste '' = miejsce wolne.\n    //   nazwa: tekst na KNX \"Ostatnio otworzył\" (max 14 znaków)\n    //   scena: numer sceny KNX 1–64 wysyłany na 7/1/0 (jak w ETS)\n    osoby: [\n        /*  1 → 7/3/1  */ { klucz: 'anna',   nazwa: 'Anna',   scena: 1 },\n        /*  2 → 7/3/2  */ { klucz: 'piotr',  nazwa: 'Piotr',  scena: 2 },\n        /*  3 → 7/3/3  */ { klucz: 'lukasz', nazwa: 'Lukasz', scena: 3 },\n        /*  4 → 7/3/4  */ { klucz: '',       nazwa: 'Osoba 4',  scena: 4 },\n        /*  5 → 7/3/5  */ { klucz: '',       nazwa: 'Osoba 5',  scena: 5 },\n        /*  6 → 7/3/6  */ { klucz: '',       nazwa: 'Osoba 6',  scena: 6 },\n        /*  7 → 7/3/7  */ { klucz: '',       nazwa: 'Osoba 7',  scena: 7 },\n        /*  8 → 7/3/8  */ { klucz: '',       nazwa: 'Osoba 8',  scena: 8 },\n        /*  9 → 7/3/9  */ { klucz: '',       nazwa: 'Osoba 9',  scena: 9 },\n        /* 10 → 7/3/10 */ { klucz: '',       nazwa: 'Osoba 10', scena: 10 },\n    ],\n};\n\n// ---------------------------------------------------------------------\nconst aktywne = config.osoby.filter(o => o.klucz);\nconst klucze = aktywne.map(o => o.klucz.toLowerCase());\nconst powtorzone = klucze.filter((k, i) => klucze.indexOf(k) !== i);\nif (powtorzone.length) node.warn('Powtórzony klucz osoby: ' + powtorzone.join(', '));\nif (config.osoby.length > 10) node.warn('Flow ma 10 wyjść KNX – osoby powyżej 10 dostaną tylko scenę.');\nflow.set('config', config);\nnode.status({ fill: config.lockId && !powtorzone.length ? 'green' : 'yellow', shape: 'dot',\n    text: `${aktywne.length}/10 osób` + (config.lockId ? `, zamek ${config.lockId}` : ', UWAGA: brak lockId') });\nreturn null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "outputLabels": [],
+    "x": 380,
+    "y": 80,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_cmt0000002",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "② CALLBACK Z CHMURY TTLOCK – zmień adres URL na własny sekret",
+    "info": "Adres musi być taki sam jak callback URL w euopen.ttlock.com (np. https://drzwi.twojadomena.pl/ttlock/SEKRET).",
+    "x": 320,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "ttknx_httpin0001",
+    "type": "http in",
+    "z": "ttknx_tab0000001",
+    "name": "Callback TTLock (POST)",
+    "url": "/ttlock/zmien-ten-sekret",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 160,
+    "y": 200,
+    "wires": [
+      [
+        "ttknx_fn_parse001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_fn_parse001",
+    "type": "function",
+    "z": "ttknx_tab0000001",
+    "name": "Kto otworzył? → automatyka",
+    "func": "// Odbiera callback TTLock \"Lock Records Notify\", filtruje i mapuje osobę na scenę.\n// Wyjścia: 1 = odpowiedź HTTP \"success\", 2 = scena KNX, 3 = tekst KNX,\n//          4 = wyzwalacz osoby (msg.miejsce 1–10), 5 = log\nconst TYPY = {\n    1: 'aplikacja (eKey)', 4: 'kod PIN', 7: 'karta/brelok RFID', 8: 'odcisk palca',\n    10: 'klucz mechaniczny', 11: 'zamknięcie z aplikacji', 12: 'zdalnie przez bramkę',\n    29: 'otwarcie siłowe', 32: 'otwarcie od środka', 44: 'sabotaż', 45: 'autozamykanie',\n    46: 'przycisk otwierania', 48: 'blokada po błędnych próbach', 55: 'pilot',\n    65: 'nieudane otwarcie', 92: 'kod administratora',\n};\nconst TYPY_PIN = [4, 34, 92]; // w tych rekordach keyboardPwd zawiera prawdziwy PIN\n\nfunction bezOgonkow(t) {\n    return String(t).replace(/ł/g, 'l').replace(/Ł/g, 'L')\n        .normalize('NFD').replace(/[̀-ͯ]/g, '');\n}\nfunction klucz(nazwa) {\n    return bezOgonkow(String(nazwa).trim().split(/[\\s\\-_–—.,]+/)[0] || '').toLowerCase();\n}\nfunction maskuj(r) {\n    const kopia = Object.assign({}, r);\n    if (TYPY_PIN.includes(Number(r.recordType)) && kopia.keyboardPwd) kopia.keyboardPwd = '****';\n    return kopia;\n}\n\n// TTLock oczekuje odpowiedzi \"success\" – odpowiadamy zawsze (także na testy bez msg.res)\nconst odpowiedz = msg.res ? { req: msg.req, res: msg.res, statusCode: 200,\n    headers: { 'Content-Type': 'text/plain' }, payload: 'success' } : null;\n\nconst cfg = flow.get('config');\nif (!cfg) {\n    node.warn('Brak konfiguracji – kliknij Deploy albo przycisk w węźle \"Wczytaj konfigurację\".');\n    return [odpowiedz, null, null, null, null];\n}\n\nconst body = msg.payload || {};\nconst lockId = String(body.lockId || '');\nif (cfg.lockId && lockId !== String(cfg.lockId)) {\n    return [odpowiedz, null, null, null, { payload: `Obcy lockId ${lockId} – zignorowano` }];\n}\nif (body.notifyType !== undefined && String(body.notifyType) !== '1') {\n    return [odpowiedz, null, null, null, { payload: `notifyType=${body.notifyType} (to nie rekord otwarcia) – pominięto` }];\n}\n\nlet rekordy = [];\ntry {\n    rekordy = typeof body.records === 'string' ? JSON.parse(body.records) : (body.records || []);\n} catch (e) {\n    node.error('Nie można odczytać pola \"records\": ' + e.message);\n    return [odpowiedz, null, null, null, null];\n}\n\nconst wlaczona = flow.get('automatykaWlaczona') !== false;\nconst widziane = flow.get('widziane') || [];\nconst teraz = Date.now();\nconst sceny = [], teksty = [], wyzwalacze = [], logi = [];\n\nfor (const r of rekordy) {\n    const typ = Number(r.recordType);\n    const nazwa = String(r.username || '');\n    const id = `${r.lockDate}-${typ}-${nazwa}`;\n    const osobaKlucz = klucz(nazwa);\n    const miejsce = cfg.osoby.findIndex(o => o.klucz && o.klucz.toLowerCase() === osobaKlucz) + 1;\n    const osoba = miejsce ? cfg.osoby[miejsce - 1] : null;\n    let decyzja;\n\n    if (widziane.includes(id)) decyzja = 'duplikat – pominięto';\n    else if (Number(r.success) !== 1) decyzja = 'nieudana próba – pominięto';\n    else if (!cfg.typyPrzyjscia.includes(typ)) decyzja = 'ten typ nie uruchamia sceny';\n    else if (teraz - Number(r.lockDate) > cfg.maksWiekMinut * 60000) decyzja = 'rekord zbyt stary – pominięto';\n    else if (!osoba) decyzja = `nieznana osoba \"${osobaKlucz}\" – dodaj ją w KONFIGURACJI`;\n    else if (!wlaczona) decyzja = 'automatyka wyłączona z KNX – pominięto';\n    else {\n        decyzja = `OSOBA ${miejsce} (7/3/${miejsce}), SCENA ${osoba.scena}`;\n        if (osoba.scena) sceny.push({ payload: { save_recall: 0, scenenumber: Number(osoba.scena) }, osoba: osoba.nazwa });\n        wyzwalacze.push({ payload: true, miejsce, osoba: osoba.nazwa });\n        teksty.push({ payload: bezOgonkow(osoba.nazwa).substring(0, 14) });\n    }\n    widziane.push(id);\n\n    const czas = new Date(Number(r.lockDate)).toLocaleString('pl-PL');\n    const opoznienie = ((teraz - Number(r.lockDate)) / 1000).toFixed(1);\n    logi.push({\n        payload: `${czas} | ${TYPY[typ] || 'typ ' + typ} | \"${nazwa}\" | ${decyzja} | opóźnienie ${opoznienie} s`,\n        rekord: maskuj(r),\n    });\n}\nflow.set('widziane', widziane.slice(-200));\n\nif (logi.length) {\n    const ostatni = logi[logi.length - 1].payload.split(' | ');\n    node.status({ fill: wyzwalacze.length ? 'green' : 'grey', shape: 'dot', text: `${ostatni[2]}: ${ostatni[3]}` });\n}\nreturn [odpowiedz, sceny, teksty, wyzwalacze, logi];\n",
+    "outputs": 5,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "outputLabels": [
+      "odpowiedź HTTP",
+      "scena KNX",
+      "tekst KNX",
+      "wyzwalacz osoby 1–10",
+      "log"
+    ],
+    "x": 440,
+    "y": 260,
+    "wires": [
+      [
+        "ttknx_httpres001"
+      ],
+      [
+        "ttknx_knx_scene01"
+      ],
+      [
+        "ttknx_knx_text001"
+      ],
+      [
+        "ttknx_switch0001"
+      ],
+      [
+        "ttknx_debug00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_switch0001",
+    "type": "switch",
+    "z": "ttknx_tab0000001",
+    "name": "Która osoba (1–10)?",
+    "property": "miejsce",
+    "propertyType": "msg",
+    "rules": [
+      {
+        "t": "eq",
+        "v": "1",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "2",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "3",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "4",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "5",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "6",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "7",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "8",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "9",
+        "vt": "num"
+      },
+      {
+        "t": "eq",
+        "v": "10",
+        "vt": "num"
+      }
+    ],
+    "checkall": "false",
+    "repair": false,
+    "outputs": 10,
+    "outputLabels": [
+      "osoba 1",
+      "osoba 2",
+      "osoba 3",
+      "osoba 4",
+      "osoba 5",
+      "osoba 6",
+      "osoba 7",
+      "osoba 8",
+      "osoba 9",
+      "osoba 10"
+    ],
+    "x": 760,
+    "y": 520,
+    "wires": [
+      [
+        "ttknx_knx_os01_01"
+      ],
+      [
+        "ttknx_knx_os02_01"
+      ],
+      [
+        "ttknx_knx_os03_01"
+      ],
+      [
+        "ttknx_knx_os04_01"
+      ],
+      [
+        "ttknx_knx_os05_01"
+      ],
+      [
+        "ttknx_knx_os06_01"
+      ],
+      [
+        "ttknx_knx_os07_01"
+      ],
+      [
+        "ttknx_knx_os08_01"
+      ],
+      [
+        "ttknx_knx_os09_01"
+      ],
+      [
+        "ttknx_knx_os10_01"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_cmt0000006",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "⑥ WYZWALACZE OSÓB – 1 na GA osoby, gdy ta osoba otworzy drzwi (DPT 1.001)",
+    "info": "Połącz w ETS z logiką / sceną / modułem czasowym. Wysyłane jest 1 przy każdym otwarciu.",
+    "x": 1060,
+    "y": 380,
+    "wires": []
+  },
+  {
+    "id": "ttknx_knx_os01_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/1",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 1 otworzyła (7/3/1)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 420,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os02_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/2",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 2 otworzyła (7/3/2)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 460,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os03_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/3",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 3 otworzyła (7/3/3)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 500,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os04_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/4",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 4 otworzyła (7/3/4)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 540,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os05_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/5",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 5 otworzyła (7/3/5)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 580,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os06_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/6",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 6 otworzyła (7/3/6)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 620,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os07_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/7",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 7 otworzyła (7/3/7)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 660,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os08_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/8",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 8 otworzyła (7/3/8)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 700,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os09_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/9",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 9 otworzyła (7/3/9)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 740,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_os10_01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/3/10",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Osoba 10 otworzyła (7/3/10)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 1040,
+    "y": 780,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_httpres001",
+    "type": "http response",
+    "z": "ttknx_tab0000001",
+    "name": "odpowiedź: success",
+    "statusCode": "",
+    "headers": {},
+    "x": 730,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ttknx_cmt0000003",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "③ WYJŚCIA KNX – ustaw adresy grup (GA) takie jak w ETS",
+    "info": "",
+    "x": 800,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "ttknx_knx_scene01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/1/0",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "18.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Scena przyjścia (7/1/0)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 760,
+    "y": 220,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_text001",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/2/0",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "16.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Ostatnio otworzył (7/2/0)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 760,
+    "y": 260,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_debug00001",
+    "type": "debug",
+    "z": "ttknx_tab0000001",
+    "name": "Log zdarzeń",
+    "active": true,
+    "tosidebar": true,
+    "console": true,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 730,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "ttknx_cmt0000004",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "④ WŁĄCZ / WYŁĄCZ automatykę z KNX (np. urlop, goście, sprzątanie)",
+    "info": "",
+    "x": 330,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "ttknx_knx_enabl01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/4/0",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 1,
+    "notifyreadrequest": false,
+    "notifyresponse": true,
+    "notifywrite": true,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Automatyka wł/wył (7/4/0)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 190,
+    "y": 400,
+    "wires": [
+      [
+        "ttknx_fn_enable01"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_fn_enable01",
+    "type": "function",
+    "z": "ttknx_tab0000001",
+    "name": "Zapamiętaj stan",
+    "func": "// Zapamiętuje stan GA \"automatyka włączona\" (DPT 1.001) odebrany z KNX.\nconst wl = msg.payload === true || msg.payload === 1 || msg.payload === 'true';\nflow.set('automatykaWlaczona', wl);\nnode.status({ fill: wl ? 'green' : 'red', shape: 'dot', text: wl ? 'automatyka WŁ' : 'automatyka WYŁ' });\nreturn null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "outputLabels": [],
+    "x": 440,
+    "y": 400,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_cmt0000005",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "⑤ TESTY – kliknij przycisk po lewej, wynik w zakładce Debug (🐞)",
+    "info": "",
+    "x": 330,
+    "y": 460,
+    "wires": []
+  },
+  {
+    "id": "ttknx_inj_test01",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "TEST: odcisk palca „Anna”",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.5,
+    "topic": "palec",
+    "x": 180,
+    "y": 500,
+    "wires": [
+      [
+        "ttknx_fn_sim00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_inj_test02",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "TEST: kod PIN „Piotr”",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.5,
+    "topic": "pin",
+    "x": 170,
+    "y": 540,
+    "wires": [
+      [
+        "ttknx_fn_sim00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_inj_test03",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "TEST: otwarcie od środka",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.5,
+    "topic": "srodek",
+    "x": 170,
+    "y": 580,
+    "wires": [
+      [
+        "ttknx_fn_sim00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_inj_test04",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "TEST: nieznany brelok",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.5,
+    "topic": "nieznany",
+    "x": 160,
+    "y": 620,
+    "wires": [
+      [
+        "ttknx_fn_sim00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_fn_sim00001",
+    "type": "function",
+    "z": "ttknx_tab0000001",
+    "name": "Symulacja callbacku",
+    "func": "// Symuluje callback z chmury TTLock – do testów bez zamka.\nconst cfg = flow.get('config') || {};\nconst lockId = cfg.lockId || '1234567';\nconst teraz = Date.now();\nconst scenariusze = {\n    palec:    { recordType: 8,  username: 'Anna - kciuk',  keyboardPwd: '44668054142981' },\n    pin:      { recordType: 4,  username: 'Piotr kod',     keyboardPwd: '123456' },\n    srodek:   { recordType: 32, username: '',              keyboardPwd: '' },\n    nieznany: { recordType: 7,  username: 'Gosc brelok',   keyboardPwd: '0012345678' },\n};\nconst s = scenariusze[msg.topic] || scenariusze.palec;\nmsg.payload = {\n    lockId: String(lockId),\n    notifyType: '1',\n    lockMac: 'AA:BB:CC:DD:EE:FF',\n    records: JSON.stringify([Object.assign({\n        lockId: Number(lockId), success: 1, lockDate: teraz - 2000,\n        serverDate: teraz - 500, electricQuantity: 100,\n    }, s)]),\n};\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "outputLabels": [],
+    "x": 440,
+    "y": 560,
+    "wires": [
+      [
+        "ttknx_fn_parse001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_knxcfg0001",
+    "type": "knxUltimate-config",
+    "host": "192.168.1.50",
+    "port": "3671",
+    "physAddr": "15.15.22",
+    "hostProtocol": "TunnelUDP",
+    "suppressACKRequest": false,
+    "csv": "",
+    "KNXEthInterface": "Auto",
+    "KNXEthInterfaceManuallyInput": "",
+    "stopETSImportIfNoDatapoint": "fake",
+    "loglevel": "error",
+    "name": "Interfejs KNX IP",
+    "delaybetweentelegrams": 25,
+    "ignoreTelegramsWithRepeatedFlag": false,
+    "keyringFileXML": "",
+    "knxSecureSelected": false,
+    "secureCredentialsMode": "keyring",
+    "tunnelIASelection": "Auto",
+    "tunnelIA": "",
+    "tunnelInterfaceIndividualAddress": "",
+    "tunnelUserPassword": "",
+    "tunnelUserId": "",
+    "autoReconnect": "yes"
+  }
+]
