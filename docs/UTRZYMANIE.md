@@ -20,7 +20,7 @@ Ten dokument opisuje:
 | knx-ultimate `autoReconnect` | Po restarcie interfejsu KNX lub sieci połączenie wraca samo. |
 | `restart: unless-stopped` / usługa systemd | Po zaniku prądu Node-RED i tunel startują same. |
 | Limit logów Docker (3 × 10 MB) | Logi nie zapełnią dysku. |
-| Testy automatyczne (`node tests/test-flow.js`, `python3 tests/test_ttlock_test.py`) | Po każdej zmianie kodu 57 testów flow i 13 testów skryptu sprawdza całą logikę. |
+| Testy automatyczne (`node tests/test-flow.js`, `python3 tests/test_ttlock_test.py`) | Po każdej zmianie kodu 60 testów flow i 13 testów skryptu sprawdza całą logikę. |
 
 ## Ryzyka w ciągu 5 lat i zabezpieczenia
 
