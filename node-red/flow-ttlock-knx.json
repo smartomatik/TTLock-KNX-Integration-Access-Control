@@ -4,14 +4,36 @@
     "type": "tab",
     "label": "TTLock → KNX",
     "disabled": false,
-    "info": "Scena przyjścia KNX zależna od osoby, która otworzyła drzwi (callback TTLock).\nInstrukcja: docs/INSTRUKCJA-NODE-RED.md"
+    "info": "TTLock → KNX, wersja 2.0.0\nAutomatyka KNX zależna od osoby, która otworzyła drzwi (callback TTLock).\nInstrukcja: docs/INSTRUKCJA-NODE-RED.md\n\nZmienne zakładki (typ credential) dla SERWISU – krok 10a instrukcji:\nTTLOCK_CLIENT_ID, TTLOCK_CLIENT_SECRET, TTLOCK_USER, TTLOCK_PASS",
+    "env": [
+      {
+        "name": "TTLOCK_CLIENT_ID",
+        "value": "",
+        "type": "cred"
+      },
+      {
+        "name": "TTLOCK_CLIENT_SECRET",
+        "value": "",
+        "type": "cred"
+      },
+      {
+        "name": "TTLOCK_USER",
+        "value": "",
+        "type": "cred"
+      },
+      {
+        "name": "TTLOCK_PASS",
+        "value": "",
+        "type": "cred"
+      }
+    ]
   },
   {
     "id": "ttknx_cmt0000001",
     "type": "comment",
     "z": "ttknx_tab0000001",
     "name": "① KONFIGURACJA – edytuj węzeł „⚙ KONFIGURACJA” (osoby, sceny, lockId)",
-    "info": "Kliknij dwukrotnie węzeł ⚙ KONFIGURACJA i zmień listę osób.\nPo zmianie kliknij Deploy.",
+    "info": "Kliknij dwukrotnie węzeł ⚙ KONFIGURACJA i zmień listę osób.\nPo zmianie kliknij Deploy.\nBłędna konfiguracja jest odrzucana (czerwony status), działa wtedy poprzednia.",
     "x": 330,
     "y": 40,
     "wires": []
@@ -30,7 +52,7 @@
     "repeat": "",
     "crontab": "",
     "once": true,
-    "onceDelay": 0.5,
+    "onceDelay": 0.1,
     "topic": "",
     "x": 150,
     "y": 80,
@@ -45,7 +67,7 @@
     "type": "function",
     "z": "ttknx_tab0000001",
     "name": "⚙ KONFIGURACJA",
-    "func": "// =====================================================================\n//  KONFIGURACJA – to jedyne miejsce, które instalator musi edytować.\n//  Po zmianie: kliknij \"Done\", a potem \"Deploy\".\n// =====================================================================\nconst config = {\n    // ID zamka w chmurze TTLock (odczytasz go skryptem tools/ttlock_test.py).\n    // Puste '' = akceptuj każdy zamek – TYLKO na czas testów!\n    lockId: '',\n\n    // Rekord starszy niż tyle minut nie uruchomi automatyki\n    // (np. bramka była offline i wysłała zaległe zdarzenia).\n    maksWiekMinut: 5,\n\n    // Typy otwarcia, które uruchamiają automatykę:\n    //  8 = odcisk palca, 4 = kod PIN, 7 = karta/brelok RFID, 55 = pilot\n    //  1 = aplikacja (eKey), 12 = zdalnie przez bramkę – dodaj dopiero po teście\n    typyPrzyjscia: [8, 4, 7, 55],\n\n    // 10 miejsc na osoby. Numer miejsca = adres wyzwalacza KNX 7/3/<nr>.\n    //   klucz: PIERWSZE SŁOWO nazwy odcisku/karty/kodu w aplikacji,\n    //          małymi literami, bez polskich znaków (\"Łukasz - kciuk\" -> 'lukasz').\n    //          Puste '' = miejsce wolne.\n    //   nazwa: tekst na KNX \"Ostatnio otworzył\" (max 14 znaków)\n    //   scena: numer sceny KNX 1–64 wysyłany na 7/1/0 (jak w ETS)\n    osoby: [\n        /*  1 → 7/3/1  */ { klucz: 'anna',   nazwa: 'Anna',   scena: 1 },\n        /*  2 → 7/3/2  */ { klucz: 'piotr',  nazwa: 'Piotr',  scena: 2 },\n        /*  3 → 7/3/3  */ { klucz: 'lukasz', nazwa: 'Lukasz', scena: 3 },\n        /*  4 → 7/3/4  */ { klucz: '',       nazwa: 'Osoba 4',  scena: 4 },\n        /*  5 → 7/3/5  */ { klucz: '',       nazwa: 'Osoba 5',  scena: 5 },\n        /*  6 → 7/3/6  */ { klucz: '',       nazwa: 'Osoba 6',  scena: 6 },\n        /*  7 → 7/3/7  */ { klucz: '',       nazwa: 'Osoba 7',  scena: 7 },\n        /*  8 → 7/3/8  */ { klucz: '',       nazwa: 'Osoba 8',  scena: 8 },\n        /*  9 → 7/3/9  */ { klucz: '',       nazwa: 'Osoba 9',  scena: 9 },\n        /* 10 → 7/3/10 */ { klucz: '',       nazwa: 'Osoba 10', scena: 10 },\n    ],\n};\n\n// ---------------------------------------------------------------------\nconst aktywne = config.osoby.filter(o => o.klucz);\nconst klucze = aktywne.map(o => o.klucz.toLowerCase());\nconst powtorzone = klucze.filter((k, i) => klucze.indexOf(k) !== i);\nif (powtorzone.length) node.warn('Powtórzony klucz osoby: ' + powtorzone.join(', '));\nif (config.osoby.length > 10) node.warn('Flow ma 10 wyjść KNX – osoby powyżej 10 dostaną tylko scenę.');\nflow.set('config', config);\nnode.status({ fill: config.lockId && !powtorzone.length ? 'green' : 'yellow', shape: 'dot',\n    text: `${aktywne.length}/10 osób` + (config.lockId ? `, zamek ${config.lockId}` : ', UWAGA: brak lockId') });\nreturn null;\n",
+    "func": "// =====================================================================\n//  KONFIGURACJA – to jedyne miejsce, które instalator musi edytować.\n//  Po zmianie: kliknij \"Done\", a potem \"Deploy\".\n// =====================================================================\nconst config = {\n    // ID zamka w chmurze TTLock (odczytasz go skryptem tools/ttlock_test.py).\n    // Puste '' = akceptuj każdy zamek – TYLKO na czas testów!\n    lockId: '',\n\n    // Rekord starszy niż tyle minut nie uruchomi automatyki\n    // (np. bramka była offline i wysłała zaległe zdarzenia). Zakres 1–1440.\n    maksWiekMinut: 5,\n\n    // Typy otwarcia, które uruchamiają automatykę:\n    //  8 = odcisk palca, 4 = kod PIN, 7 = karta/brelok RFID, 55 = pilot\n    //  1 = aplikacja (eKey), 12 = zdalnie przez bramkę – dodaj dopiero po teście\n    typyPrzyjscia: [8, 4, 7, 55],\n\n    // 10 miejsc na osoby. Numer miejsca = adres wyzwalacza KNX 7/3/<nr>.\n    //   klucz: PIERWSZE SŁOWO nazwy odcisku/karty/kodu w aplikacji,\n    //          małymi literami, bez polskich znaków (\"Łukasz - kciuk\" -> 'lukasz').\n    //          Puste '' = miejsce wolne.\n    //   nazwa: tekst na KNX \"Ostatnio otworzył\" (max 14 znaków)\n    //   scena: numer sceny KNX 1–64 wysyłany na 7/1/0 (jak w ETS), 0 = bez sceny\n    osoby: [\n        /*  1 → 7/3/1  */ { klucz: 'anna',   nazwa: 'Anna',   scena: 1 },\n        /*  2 → 7/3/2  */ { klucz: 'piotr',  nazwa: 'Piotr',  scena: 2 },\n        /*  3 → 7/3/3  */ { klucz: 'lukasz', nazwa: 'Lukasz', scena: 3 },\n        /*  4 → 7/3/4  */ { klucz: '',       nazwa: 'Osoba 4',  scena: 4 },\n        /*  5 → 7/3/5  */ { klucz: '',       nazwa: 'Osoba 5',  scena: 5 },\n        /*  6 → 7/3/6  */ { klucz: '',       nazwa: 'Osoba 6',  scena: 6 },\n        /*  7 → 7/3/7  */ { klucz: '',       nazwa: 'Osoba 7',  scena: 7 },\n        /*  8 → 7/3/8  */ { klucz: '',       nazwa: 'Osoba 8',  scena: 8 },\n        /*  9 → 7/3/9  */ { klucz: '',       nazwa: 'Osoba 9',  scena: 9 },\n        /* 10 → 7/3/10 */ { klucz: '',       nazwa: 'Osoba 10', scena: 10 },\n    ],\n};\n\n// =====================================================================\n//  Poniżej nic nie zmieniaj – sprawdzenie poprawności konfiguracji.\n// =====================================================================\nfunction bezOgonkow(t) {\n    return String(t).replace(/ł/g, 'l').replace(/Ł/g, 'L')\n        .normalize('NFD').replace(/[̀-ͯ]/g, '');\n}\nfunction tekstKnx(t) {\n    // DPT 16.001 = ISO 8859-1, maks. 14 znaków\n    return bezOgonkow(t).replace(/[^\\x20-\\x7E\\xA0-\\xFF]/g, '').trim().substring(0, 14);\n}\n\nconst bledy = [];\nconst lockId = String(config.lockId === undefined || config.lockId === null ? '' : config.lockId).trim();\nif (lockId && !/^\\d+$/.test(lockId)) bledy.push('lockId może zawierać tylko cyfry');\n\nconst maksWiekMinut = Number(config.maksWiekMinut);\nif (!(Number.isFinite(maksWiekMinut) && maksWiekMinut >= 1 && maksWiekMinut <= 1440)) {\n    bledy.push('maksWiekMinut musi być liczbą 1–1440');\n}\n\nconst typyPrzyjscia = Array.isArray(config.typyPrzyjscia) ? config.typyPrzyjscia.map(Number) : [];\nif (!typyPrzyjscia.length || typyPrzyjscia.some(t => !Number.isInteger(t) || t <= 0)) {\n    bledy.push('typyPrzyjscia musi być listą numerów, np. [8, 4, 7, 55]');\n}\nif (typyPrzyjscia.some(t => [10, 29, 32, 44, 48].includes(t))) {\n    bledy.push('typyPrzyjscia nie może zawierać 10, 29, 32, 44 ani 48 (klucz, siła, wnętrze, sabotaż, blokada)');\n}\n\nconst listaOsob = Array.isArray(config.osoby) ? config.osoby : [];\nif (listaOsob.length > 10) bledy.push('maksymalnie 10 osób (flow ma 10 wyzwalaczy KNX)');\nconst osoby = listaOsob.slice(0, 10).map((o, i) => {\n    o = o || {};\n    const klucz = bezOgonkow(String(o.klucz || '').trim()).toLowerCase();\n    const scena = Number(o.scena === undefined || o.scena === null || o.scena === '' ? 0 : o.scena);\n    if (klucz && !/^[a-z0-9]+$/.test(klucz)) bledy.push(`osoba ${i + 1}: klucz może zawierać tylko litery i cyfry (jedno słowo)`);\n    if (!Number.isInteger(scena) || scena < 0 || scena > 64) bledy.push(`osoba ${i + 1}: scena musi być liczbą 0–64`);\n    const nazwa = tekstKnx(o.nazwa || klucz || `Osoba ${i + 1}`) || `Osoba ${i + 1}`;\n    return { klucz, nazwa, scena };\n});\nconst klucze = osoby.map(o => o.klucz).filter(Boolean);\nklucze.filter((k, i) => klucze.indexOf(k) !== i)\n    .forEach(k => bledy.push(`klucz \"${k}\" występuje dwa razy`));\n\nif (bledy.length) {\n    // Błędna konfiguracja NIE zastępuje ostatniej poprawnej.\n    const stara = flow.get('config');\n    node.error('Błędna KONFIGURACJA – popraw i kliknij Deploy: ' + bledy.join('; '));\n    node.status({ fill: 'red', shape: 'ring',\n        text: `BŁĄD: ${bledy[0]}` + (stara ? ' (działa poprzednia konfiguracja)' : '') });\n    return null;\n}\n\nflow.set('config', { lockId, maksWiekMinut, typyPrzyjscia, osoby });\nnode.status({ fill: lockId ? 'green' : 'yellow', shape: 'dot',\n    text: `${klucze.length}/10 osób` + (lockId ? `, zamek ${lockId}` : ', UWAGA: brak lockId') });\nreturn null;\n",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -91,7 +113,7 @@
     "type": "function",
     "z": "ttknx_tab0000001",
     "name": "Kto otworzył? → automatyka",
-    "func": "// Odbiera callback TTLock \"Lock Records Notify\", filtruje i mapuje osobę na scenę.\n// Wyjścia: 1 = odpowiedź HTTP \"success\", 2 = scena KNX, 3 = tekst KNX,\n//          4 = wyzwalacz osoby (msg.miejsce 1–10), 5 = log\nconst TYPY = {\n    1: 'aplikacja (eKey)', 4: 'kod PIN', 7: 'karta/brelok RFID', 8: 'odcisk palca',\n    10: 'klucz mechaniczny', 11: 'zamknięcie z aplikacji', 12: 'zdalnie przez bramkę',\n    29: 'otwarcie siłowe', 32: 'otwarcie od środka', 44: 'sabotaż', 45: 'autozamykanie',\n    46: 'przycisk otwierania', 48: 'blokada po błędnych próbach', 55: 'pilot',\n    65: 'nieudane otwarcie', 92: 'kod administratora',\n};\nconst TYPY_PIN = [4, 34, 92]; // w tych rekordach keyboardPwd zawiera prawdziwy PIN\n\nfunction bezOgonkow(t) {\n    return String(t).replace(/ł/g, 'l').replace(/Ł/g, 'L')\n        .normalize('NFD').replace(/[̀-ͯ]/g, '');\n}\nfunction klucz(nazwa) {\n    return bezOgonkow(String(nazwa).trim().split(/[\\s\\-_–—.,]+/)[0] || '').toLowerCase();\n}\nfunction maskuj(r) {\n    const kopia = Object.assign({}, r);\n    if (TYPY_PIN.includes(Number(r.recordType)) && kopia.keyboardPwd) kopia.keyboardPwd = '****';\n    return kopia;\n}\n\n// TTLock oczekuje odpowiedzi \"success\" – odpowiadamy zawsze (także na testy bez msg.res)\nconst odpowiedz = msg.res ? { req: msg.req, res: msg.res, statusCode: 200,\n    headers: { 'Content-Type': 'text/plain' }, payload: 'success' } : null;\n\nconst cfg = flow.get('config');\nif (!cfg) {\n    node.warn('Brak konfiguracji – kliknij Deploy albo przycisk w węźle \"Wczytaj konfigurację\".');\n    return [odpowiedz, null, null, null, null];\n}\n\nconst body = msg.payload || {};\nconst lockId = String(body.lockId || '');\nif (cfg.lockId && lockId !== String(cfg.lockId)) {\n    return [odpowiedz, null, null, null, { payload: `Obcy lockId ${lockId} – zignorowano` }];\n}\nif (body.notifyType !== undefined && String(body.notifyType) !== '1') {\n    return [odpowiedz, null, null, null, { payload: `notifyType=${body.notifyType} (to nie rekord otwarcia) – pominięto` }];\n}\n\nlet rekordy = [];\ntry {\n    rekordy = typeof body.records === 'string' ? JSON.parse(body.records) : (body.records || []);\n} catch (e) {\n    node.error('Nie można odczytać pola \"records\": ' + e.message);\n    return [odpowiedz, null, null, null, null];\n}\n\nconst wlaczona = flow.get('automatykaWlaczona') !== false;\nconst widziane = flow.get('widziane') || [];\nconst teraz = Date.now();\nconst sceny = [], teksty = [], wyzwalacze = [], logi = [];\n\nfor (const r of rekordy) {\n    const typ = Number(r.recordType);\n    const nazwa = String(r.username || '');\n    const id = `${r.lockDate}-${typ}-${nazwa}`;\n    const osobaKlucz = klucz(nazwa);\n    const miejsce = cfg.osoby.findIndex(o => o.klucz && o.klucz.toLowerCase() === osobaKlucz) + 1;\n    const osoba = miejsce ? cfg.osoby[miejsce - 1] : null;\n    let decyzja;\n\n    if (widziane.includes(id)) decyzja = 'duplikat – pominięto';\n    else if (Number(r.success) !== 1) decyzja = 'nieudana próba – pominięto';\n    else if (!cfg.typyPrzyjscia.includes(typ)) decyzja = 'ten typ nie uruchamia sceny';\n    else if (teraz - Number(r.lockDate) > cfg.maksWiekMinut * 60000) decyzja = 'rekord zbyt stary – pominięto';\n    else if (!osoba) decyzja = `nieznana osoba \"${osobaKlucz}\" – dodaj ją w KONFIGURACJI`;\n    else if (!wlaczona) decyzja = 'automatyka wyłączona z KNX – pominięto';\n    else {\n        decyzja = `OSOBA ${miejsce} (7/3/${miejsce}), SCENA ${osoba.scena}`;\n        if (osoba.scena) sceny.push({ payload: { save_recall: 0, scenenumber: Number(osoba.scena) }, osoba: osoba.nazwa });\n        wyzwalacze.push({ payload: true, miejsce, osoba: osoba.nazwa });\n        teksty.push({ payload: bezOgonkow(osoba.nazwa).substring(0, 14) });\n    }\n    widziane.push(id);\n\n    const czas = new Date(Number(r.lockDate)).toLocaleString('pl-PL');\n    const opoznienie = ((teraz - Number(r.lockDate)) / 1000).toFixed(1);\n    logi.push({\n        payload: `${czas} | ${TYPY[typ] || 'typ ' + typ} | \"${nazwa}\" | ${decyzja} | opóźnienie ${opoznienie} s`,\n        rekord: maskuj(r),\n    });\n}\nflow.set('widziane', widziane.slice(-200));\n\nif (logi.length) {\n    const ostatni = logi[logi.length - 1].payload.split(' | ');\n    node.status({ fill: wyzwalacze.length ? 'green' : 'grey', shape: 'dot', text: `${ostatni[2]}: ${ostatni[3]}` });\n}\nreturn [odpowiedz, sceny, teksty, wyzwalacze, logi];\n",
+    "func": "// Odbiera callback TTLock \"Lock Records Notify\", filtruje i mapuje osobę na automatykę.\n// Wyjścia: 1 = odpowiedź HTTP \"success\", 2 = scena KNX, 3 = tekst KNX,\n//          4 = wyzwalacz osoby (msg.miejsce 1–10), 5 = log\nconst TYPY = {\n    1: 'aplikacja (eKey)', 4: 'kod PIN', 7: 'karta/brelok RFID', 8: 'odcisk palca',\n    10: 'klucz mechaniczny', 11: 'zamknięcie z aplikacji', 12: 'zdalnie przez bramkę',\n    29: 'otwarcie siłowe', 32: 'otwarcie od środka', 44: 'sabotaż', 45: 'autozamykanie',\n    46: 'przycisk otwierania', 48: 'blokada po błędnych próbach', 55: 'pilot',\n    65: 'nieudane otwarcie', 92: 'kod administratora',\n};\nconst TYPY_PIN = [4, 34, 92];   // w tych rekordach keyboardPwd zawiera prawdziwy PIN\nconst MAKS_REKORDOW = 50;       // ochrona przed zalaniem dużym zapytaniem\nconst PAMIEC_DUPLIKATOW = 500;  // ile ostatnich rekordów pamiętać\nconst ZEGAR_TOLERANCJA_MS = 5 * 60000;\n\nfunction bezOgonkow(t) {\n    return String(t).replace(/ł/g, 'l').replace(/Ł/g, 'L')\n        .normalize('NFD').replace(/[̀-ͯ]/g, '');\n}\nfunction tekstKnx(t) {\n    return bezOgonkow(t).replace(/[^\\x20-\\x7E\\xA0-\\xFF]/g, '').trim().substring(0, 14);\n}\nfunction klucz(nazwa) {\n    return bezOgonkow(String(nazwa).trim().split(/[\\s\\-_–—.,;:/]+/)[0] || '').toLowerCase();\n}\nfunction maskuj(r) {\n    const kopia = Object.assign({}, r);\n    if (TYPY_PIN.includes(Number(r.recordType)) && kopia.keyboardPwd) kopia.keyboardPwd = '****';\n    return kopia;\n}\nfunction czytajRekordy(pole) {\n    let v = pole;\n    if (typeof v === 'string') v = JSON.parse(v);\n    if (v && !Array.isArray(v) && typeof v === 'object') v = [v];\n    return Array.isArray(v) ? v.filter(r => r && typeof r === 'object') : [];\n}\n\n// TTLock oczekuje odpowiedzi \"success\" – odpowiadamy ZAWSZE, także przy błędach,\n// żeby chmura nie ponawiała wysyłki. Testy z przycisków nie mają msg.res.\nconst odpowiedz = msg.res ? { req: msg.req, res: msg.res, statusCode: 200,\n    headers: { 'Content-Type': 'text/plain; charset=utf-8' }, payload: 'success' } : null;\n\nfunction przetworz() {\n    const cfg = flow.get('config');\n    if (!cfg) {\n        node.warn('Brak poprawnej konfiguracji – popraw węzeł ⚙ KONFIGURACJA i kliknij Deploy.');\n        return [odpowiedz, null, null, null, { payload: 'Brak konfiguracji – zdarzenie pominięte' }];\n    }\n\n    const body = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};\n    const lockId = String(body.lockId === undefined ? '' : body.lockId).trim();\n    if (cfg.lockId && lockId !== cfg.lockId) {\n        return [odpowiedz, null, null, null, { payload: `Obcy lockId \"${lockId}\" – zignorowano` }];\n    }\n    if (body.notifyType !== undefined && String(body.notifyType) !== '1') {\n        return [odpowiedz, null, null, null, { payload: `notifyType=${body.notifyType} (to nie rekord otwarcia) – pominięto` }];\n    }\n\n    let rekordy;\n    try {\n        rekordy = czytajRekordy(body.records);\n    } catch (e) {\n        return [odpowiedz, null, null, null, { payload: 'Nieczytelne pole \"records\" – pominięto: ' + e.message }];\n    }\n    const logi = [];\n    if (rekordy.length > MAKS_REKORDOW) {\n        logi.push({ payload: `Za dużo rekordów (${rekordy.length}) – przetwarzam ostatnie ${MAKS_REKORDOW}` });\n        rekordy = rekordy.slice(-MAKS_REKORDOW);\n    }\n\n    const wlaczona = flow.get('automatykaWlaczona') !== false;\n    const widziane = flow.get('widziane') || [];\n    const teraz = Date.now();\n    const sceny = [], teksty = [], wyzwalacze = [];\n    const uwagaLock = cfg.lockId ? '' : ' | UWAGA: lockId nieustawiony';\n\n    for (const r of rekordy) {\n        const typ = Number(r.recordType);\n        const nazwa = String(r.username === undefined || r.username === null ? '' : r.username);\n        const czasZamka = Number(r.lockDate);\n        // Wiek liczony od czasu serwera TTLock – zegar czytnika może się rozjechać\n        // (np. po zaniku zasilania), zegar serwera jest pewny.\n        const czasSerwera = Number(r.serverDate) > 0 ? Number(r.serverDate) : czasZamka;\n        const id = `${lockId}|${r.lockDate}|${typ}|${nazwa}`;\n        const osobaKlucz = klucz(nazwa);\n        const miejsce = osobaKlucz ? cfg.osoby.findIndex(o => o.klucz === osobaKlucz) + 1 : 0;\n        const osoba = miejsce ? cfg.osoby[miejsce - 1] : null;\n        const wiek = teraz - czasSerwera;\n        let decyzja;\n\n        if (!Number.isFinite(czasSerwera) || czasSerwera <= 0) decyzja = 'brak czasu w rekordzie – pominięto';\n        else if (widziane.includes(id)) decyzja = 'duplikat – pominięto';\n        else if (Number(r.success) !== 1) decyzja = 'nieudana próba – pominięto';\n        else if (!cfg.typyPrzyjscia.includes(typ)) decyzja = 'ten typ nie uruchamia automatyki';\n        else if (wiek > cfg.maksWiekMinut * 60000) decyzja = 'rekord zbyt stary – pominięto';\n        else if (!osoba) decyzja = `nieznana osoba \"${osobaKlucz}\" – dodaj ją w KONFIGURACJI`;\n        else if (!wlaczona) decyzja = 'automatyka wyłączona z KNX – pominięto';\n        else {\n            decyzja = `OSOBA ${miejsce} (7/3/${miejsce})` + (osoba.scena ? `, SCENA ${osoba.scena}` : '');\n            if (osoba.scena) sceny.push({ payload: { save_recall: 0, scenenumber: osoba.scena }, osoba: osoba.nazwa });\n            wyzwalacze.push({ payload: true, miejsce, osoba: osoba.nazwa });\n            teksty.push({ payload: tekstKnx(osoba.nazwa) });\n        }\n        if (Number.isFinite(czasSerwera) && czasSerwera > 0) widziane.push(id);\n        if (wiek < -ZEGAR_TOLERANCJA_MS) decyzja += ' | UWAGA: zegar komputera spóźnia się – sprawdź NTP';\n\n        const czas = Number.isFinite(czasZamka) && czasZamka > 0\n            ? new Date(czasZamka).toLocaleString('pl-PL') : '(brak czasu)';\n        const opoznienie = Number.isFinite(wiek) ? `${(wiek / 1000).toFixed(1)} s` : '?';\n        logi.push({\n            payload: `${czas} | ${TYPY[typ] || 'typ ' + typ} | \"${nazwa}\" | ${decyzja} | opóźnienie ${opoznienie}${uwagaLock}`,\n            rekord: maskuj(r),\n        });\n    }\n    flow.set('widziane', widziane.slice(-PAMIEC_DUPLIKATOW));\n    if (rekordy.length) flow.set('ostatniCallback', teraz);\n\n    const ostatni = logi.length ? logi[logi.length - 1].payload.split(' | ') : null;\n    if (ostatni && ostatni.length > 3) {\n        node.status({ fill: wyzwalacze.length ? 'green' : 'grey', shape: 'dot',\n            text: `${ostatni[2]}: ${ostatni[3]}`.substring(0, 60) });\n    }\n    return [odpowiedz, sceny, teksty, wyzwalacze, logi];\n}\n\ntry {\n    return przetworz();\n} catch (e) {\n    node.error('Błąd przetwarzania callbacku: ' + e.message);\n    node.status({ fill: 'red', shape: 'ring', text: 'błąd: ' + String(e.message).substring(0, 50) });\n    return [odpowiedz, null, null, null, { payload: 'BŁĄD przetwarzania: ' + e.message }];\n}\n",
     "outputs": 5,
     "timeout": 0,
     "noerr": 0,
@@ -124,6 +146,122 @@
         "ttknx_debug00001"
       ]
     ]
+  },
+  {
+    "id": "ttknx_httpres001",
+    "type": "http response",
+    "z": "ttknx_tab0000001",
+    "name": "odpowiedź: success",
+    "statusCode": "",
+    "headers": {},
+    "x": 730,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ttknx_cmt0000003",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "③ WYJŚCIA KNX – ustaw adresy grup (GA) takie jak w ETS",
+    "info": "",
+    "x": 800,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "ttknx_knx_scene01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/1/0",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "18.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Scena przyjścia (7/1/0)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 760,
+    "y": 220,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_knx_text001",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/2/0",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "16.001",
+    "initialread": 0,
+    "notifyreadrequest": false,
+    "notifyresponse": false,
+    "notifywrite": false,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Ostatnio otworzył (7/2/0)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 760,
+    "y": 260,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_debug00001",
+    "type": "debug",
+    "z": "ttknx_tab0000001",
+    "name": "Log zdarzeń",
+    "active": true,
+    "tosidebar": true,
+    "console": true,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 730,
+    "y": 340,
+    "wires": []
   },
   {
     "id": "ttknx_switch0001",
@@ -231,6 +369,203 @@
       ],
       [
         "ttknx_knx_os10_01"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_cmt0000004",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "④ WŁĄCZ / WYŁĄCZ automatykę z KNX (np. urlop, goście, sprzątanie)",
+    "info": "",
+    "x": 330,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "ttknx_knx_enabl01",
+    "type": "knxUltimate",
+    "z": "ttknx_tab0000001",
+    "server": "ttknx_knxcfg0001",
+    "topic": "7/4/0",
+    "setTopicType": "str",
+    "outputtopic": "",
+    "dpt": "1.001",
+    "initialread": 1,
+    "notifyreadrequest": false,
+    "notifyresponse": true,
+    "notifywrite": true,
+    "notifyreadrequestalsorespondtobus": false,
+    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
+    "name": "Automatyka wł/wył (7/4/0)",
+    "outputtype": "write",
+    "outputRBE": "false",
+    "inputRBE": "false",
+    "formatmultiplyvalue": 1,
+    "formatnegativevalue": "leave",
+    "formatdecimalsvalue": 999,
+    "passthrough": "no",
+    "sendMsgToKNXCode": "",
+    "receiveMsgFromKNXCode": "",
+    "listenallga": "",
+    "gaSecure": false,
+    "buttonEnabled": false,
+    "buttonMode": "toggle",
+    "buttonStaticValue": "",
+    "buttonToggleInitial": "false",
+    "periodicSend": false,
+    "periodicSendInterval": 60,
+    "x": 190,
+    "y": 400,
+    "wires": [
+      [
+        "ttknx_fn_enable01"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_fn_enable01",
+    "type": "function",
+    "z": "ttknx_tab0000001",
+    "name": "Zapamiętaj stan",
+    "func": "// Zapamiętuje stan GA \"automatyka włączona\" (DPT 1.001) odebrany z KNX.\nconst v = msg.payload;\nconst wl = v === true || v === 1 || v === '1' || v === 'true';\nflow.set('automatykaWlaczona', wl);\nnode.status({ fill: wl ? 'green' : 'red', shape: 'dot', text: wl ? 'automatyka WŁ' : 'automatyka WYŁ' });\nreturn null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "outputLabels": [],
+    "x": 440,
+    "y": 400,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ttknx_cmt0000005",
+    "type": "comment",
+    "z": "ttknx_tab0000001",
+    "name": "⑤ TESTY – kliknij przycisk po lewej, wynik w zakładce Debug (🐞)",
+    "info": "",
+    "x": 330,
+    "y": 460,
+    "wires": []
+  },
+  {
+    "id": "ttknx_inj_test01",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "TEST: odcisk palca „Anna”",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.5,
+    "topic": "palec",
+    "x": 180,
+    "y": 500,
+    "wires": [
+      [
+        "ttknx_fn_sim00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_inj_test02",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "TEST: kod PIN „Piotr”",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.5,
+    "topic": "pin",
+    "x": 170,
+    "y": 540,
+    "wires": [
+      [
+        "ttknx_fn_sim00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_inj_test03",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "TEST: otwarcie od środka",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.5,
+    "topic": "srodek",
+    "x": 170,
+    "y": 580,
+    "wires": [
+      [
+        "ttknx_fn_sim00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_inj_test04",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "TEST: nieznany brelok",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.5,
+    "topic": "nieznany",
+    "x": 160,
+    "y": 620,
+    "wires": [
+      [
+        "ttknx_fn_sim00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_fn_sim00001",
+    "type": "function",
+    "z": "ttknx_tab0000001",
+    "name": "Symulacja callbacku",
+    "func": "// Symuluje callback z chmury TTLock – do testów bez zamka.\nconst cfg = flow.get('config') || {};\nconst lockId = cfg.lockId || '1234567';\nconst teraz = Date.now();\nconst scenariusze = {\n    palec:    { recordType: 8,  username: 'Anna - kciuk',  keyboardPwd: '44668054142981' },\n    pin:      { recordType: 4,  username: 'Piotr kod',     keyboardPwd: '123456' },\n    srodek:   { recordType: 32, username: '',              keyboardPwd: '' },\n    nieznany: { recordType: 7,  username: 'Gosc brelok',   keyboardPwd: '0012345678' },\n};\nconst s = scenariusze[msg.topic] || scenariusze.palec;\nmsg.payload = {\n    lockId: String(lockId),\n    notifyType: '1',\n    lockMac: 'AA:BB:CC:DD:EE:FF',\n    records: JSON.stringify([Object.assign({\n        lockId: Number(lockId), success: 1, lockDate: teraz - 2000,\n        serverDate: teraz - 500, electricQuantity: 100,\n    }, s)]),\n};\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "outputLabels": [],
+    "x": 440,
+    "y": 560,
+    "wires": [
+      [
+        "ttknx_fn_parse001"
       ]
     ]
   },
@@ -635,42 +970,91 @@
     ]
   },
   {
-    "id": "ttknx_httpres001",
-    "type": "http response",
-    "z": "ttknx_tab0000001",
-    "name": "odpowiedź: success",
-    "statusCode": "",
-    "headers": {},
-    "x": 730,
-    "y": 180,
-    "wires": []
-  },
-  {
-    "id": "ttknx_cmt0000003",
+    "id": "ttknx_cmt0000007",
     "type": "comment",
     "z": "ttknx_tab0000001",
-    "name": "③ WYJŚCIA KNX – ustaw adresy grup (GA) takie jak w ETS",
-    "info": "",
-    "x": 800,
-    "y": 140,
+    "name": "⑦ SERWIS – co 6 h: odświeżenie tokenu TTLock, kontrola bramki i zegara → 7/4/1",
+    "info": "Wymaga danych TTLock w zmiennych zakładki (krok 10a). Bez nich serwis jest wyłączony (żółty status).\n7/4/1 = 1: integracja sprawna, 0: dwie kolejne kontrole nieudane (np. bramka offline 12 h).",
+    "x": 360,
+    "y": 700,
     "wires": []
   },
   {
-    "id": "ttknx_knx_scene01",
+    "id": "ttknx_inj_serw01",
+    "type": "inject",
+    "z": "ttknx_tab0000001",
+    "name": "Start + co 6 h",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "21600",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 60,
+    "topic": "",
+    "x": 140,
+    "y": 740,
+    "wires": [
+      [
+        "ttknx_fn_serwis01"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_fn_serwis01",
+    "type": "function",
+    "z": "ttknx_tab0000001",
+    "name": "Serwis TTLock",
+    "func": "// SERWIS – uruchamiany przy starcie i co 6 godzin.\n//  1. Loguje się do TTLock kontem administratora zamka. Odświeża to token dla\n//     naszego clientId, dzięki czemu callbacki nie przestają przychodzić\n//     (TTLock wysyła je do aplikacji z najdłużej ważnym tokenem administratora).\n//  2. Sprawdza, czy bramka widzi czytnik (gateway/listByLock, ostatnie 30 min).\n//  3. Porównuje zegar komputera z zegarem serwera TTLock.\n// Wyjścia: 1 = KNX \"Integracja OK\" (DPT 1.001), 2 = log\n// Dane logowania: zmienne zakładki (typ \"credential\") – patrz instrukcja, krok 10a.\nconst API = 'https://euapi.ttlock.com';\nconst PROG_AWARII = 2;            // ile kolejnych nieudanych kontroli, zanim wyślemy 0 na KNX\nconst ZEGAR_TOLERANCJA_S = 120;\n\nconst clientId = env.get('TTLOCK_CLIENT_ID');\nconst clientSecret = env.get('TTLOCK_CLIENT_SECRET');\nconst uzytkownik = env.get('TTLOCK_USER');\nconst haslo = env.get('TTLOCK_PASS');\n\nif (!clientId || !clientSecret || !uzytkownik || !haslo) {\n    node.status({ fill: 'yellow', shape: 'ring', text: 'wyłączony – brak danych TTLock (krok 10a)' });\n    return null;\n}\n\nfunction zapytanie(metoda, sciezka, parametry) {\n    return new Promise((ok, blad) => {\n        const dane = new URLSearchParams(parametry).toString();\n        const url = API + sciezka + (metoda === 'GET' ? '?' + dane : '');\n        const naglowki = metoda === 'GET' ? {} : {\n            'Content-Type': 'application/x-www-form-urlencoded',\n            'Content-Length': Buffer.byteLength(dane),\n        };\n        const req = https.request(url, { method: metoda, timeout: 20000, headers: naglowki }, res => {\n            let tekst = '';\n            res.setEncoding('utf8');\n            res.on('data', c => { tekst += c; if (tekst.length > 1e6) req.destroy(new Error('odpowiedź za duża')); });\n            res.on('end', () => {\n                let json = null;\n                try { json = JSON.parse(tekst); } catch (e) { /* obsłużone niżej */ }\n                if (!json || typeof json !== 'object') return blad(new Error(`nieczytelna odpowiedź HTTP ${res.statusCode}`));\n                ok({ status: res.statusCode, data: res.headers.date, json });\n            });\n        });\n        req.on('timeout', () => req.destroy(new Error('brak odpowiedzi serwera TTLock (timeout)')));\n        req.on('error', blad);\n        req.end(metoda === 'GET' ? undefined : dane);\n    });\n}\n\nconst cfg = flow.get('config');\nconst krytyczne = [], ostrzezenia = [], info = [];\n\ntry {\n    const t = await zapytanie('POST', '/oauth2/token', {\n        clientId, clientSecret, username: uzytkownik,\n        password: crypto.createHash('md5').update(String(haslo)).digest('hex'),\n    });\n    if (t.data) {\n        const roznica = Math.round((Date.now() - Date.parse(t.data)) / 1000);\n        if (Math.abs(roznica) > ZEGAR_TOLERANCJA_S) ostrzezenia.push(`zegar komputera różni się o ${roznica} s – sprawdź NTP`);\n    }\n    if (!t.json.access_token) {\n        krytyczne.push(`logowanie TTLock nieudane: ${t.json.errcode} ${t.json.errmsg || ''} – sprawdź clientId, clientSecret i hasło administratora`);\n    } else {\n        info.push(`token ważny ${Math.round((t.json.expires_in || 0) / 86400)} dni`);\n        if (!cfg || !cfg.lockId) {\n            ostrzezenia.push('lockId nieustawiony – pominięto kontrolę bramki');\n        } else {\n            const g = await zapytanie('GET', '/v3/gateway/listByLock', {\n                clientId, accessToken: t.json.access_token, lockId: cfg.lockId, date: Date.now(),\n            });\n            if (g.json.errcode) {\n                krytyczne.push(`kontrola bramki: ${g.json.errcode} ${g.json.errmsg || ''}`);\n            } else {\n                const lista = Array.isArray(g.json.list) ? g.json.list : [];\n                if (!lista.length) {\n                    krytyczne.push('żadna bramka nie widzi czytnika (bramka offline, bez zasilania lub poza zasięgiem)');\n                } else {\n                    const rssi = Math.max(...lista.map(b => Number(b.rssi)).filter(Number.isFinite), -999);\n                    info.push(`bramka ${rssi > -999 ? rssi + ' dBm' : 'OK'}`);\n                    if (rssi > -999 && rssi < -85) ostrzezenia.push(`słaby sygnał bramki (${rssi} dBm) – przybliż bramkę do czytnika`);\n                }\n            }\n        }\n    }\n} catch (e) {\n    krytyczne.push('brak połączenia z TTLock: ' + e.message);\n}\n\nconst ostatni = flow.get('ostatniCallback');\nif (ostatni) info.push(`ostatnie zdarzenie ${Math.round((Date.now() - ostatni) / 3600000)} h temu`);\n\nconst awarie = krytyczne.length ? (context.get('awarie') || 0) + 1 : 0;\ncontext.set('awarie', awarie);\nconst ok = awarie < PROG_AWARII;   // pojedyncza przerwa internetu nie alarmuje\n\nconst opis = [...krytyczne, ...ostrzezenia, ...info].join(' | ');\nnode.status({ fill: krytyczne.length ? 'red' : (ostrzezenia.length ? 'yellow' : 'green'), shape: 'dot',\n    text: (krytyczne.length ? `BŁĄD (${awarie}x): ` : 'OK: ') + opis.substring(0, 70) });\nif (krytyczne.length) node.warn('SERWIS: ' + opis);\n\nreturn [{ payload: ok }, { payload: `SERWIS ${krytyczne.length ? 'BŁĄD' : 'OK'} | ${opis}` }];\n",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "crypto",
+        "module": "crypto"
+      },
+      {
+        "var": "https",
+        "module": "https"
+      }
+    ],
+    "outputLabels": [
+      "integracja OK (KNX)",
+      "log"
+    ],
+    "x": 380,
+    "y": 740,
+    "wires": [
+      [
+        "ttknx_knx_stat001"
+      ],
+      [
+        "ttknx_debug00001"
+      ]
+    ]
+  },
+  {
+    "id": "ttknx_knx_stat001",
     "type": "knxUltimate",
     "z": "ttknx_tab0000001",
     "server": "ttknx_knxcfg0001",
-    "topic": "7/1/0",
+    "topic": "7/4/1",
     "setTopicType": "str",
     "outputtopic": "",
-    "dpt": "18.001",
+    "dpt": "1.001",
     "initialread": 0,
     "notifyreadrequest": false,
     "notifyresponse": false,
     "notifywrite": false,
     "notifyreadrequestalsorespondtobus": false,
     "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
-    "name": "Scena przyjścia (7/1/0)",
+    "name": "Integracja OK (7/4/1)",
     "outputtype": "write",
     "outputRBE": "false",
     "inputRBE": "false",
@@ -688,264 +1072,43 @@
     "buttonToggleInitial": "false",
     "periodicSend": false,
     "periodicSendInterval": 60,
-    "x": 760,
-    "y": 220,
+    "x": 640,
+    "y": 740,
     "wires": [
       []
     ]
   },
   {
-    "id": "ttknx_knx_text001",
-    "type": "knxUltimate",
+    "id": "ttknx_catch00001",
+    "type": "catch",
     "z": "ttknx_tab0000001",
-    "server": "ttknx_knxcfg0001",
-    "topic": "7/2/0",
-    "setTopicType": "str",
-    "outputtopic": "",
-    "dpt": "16.001",
-    "initialread": 0,
-    "notifyreadrequest": false,
-    "notifyresponse": false,
-    "notifywrite": false,
-    "notifyreadrequestalsorespondtobus": false,
-    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
-    "name": "Ostatnio otworzył (7/2/0)",
-    "outputtype": "write",
-    "outputRBE": "false",
-    "inputRBE": "false",
-    "formatmultiplyvalue": 1,
-    "formatnegativevalue": "leave",
-    "formatdecimalsvalue": 999,
-    "passthrough": "no",
-    "sendMsgToKNXCode": "",
-    "receiveMsgFromKNXCode": "",
-    "listenallga": "",
-    "gaSecure": false,
-    "buttonEnabled": false,
-    "buttonMode": "toggle",
-    "buttonStaticValue": "",
-    "buttonToggleInitial": "false",
-    "periodicSend": false,
-    "periodicSendInterval": 60,
-    "x": 760,
-    "y": 260,
+    "name": "Błędy w zakładce",
+    "scope": null,
+    "uncaught": false,
+    "x": 150,
+    "y": 800,
     "wires": [
-      []
+      [
+        "ttknx_debug00002"
+      ]
     ]
   },
   {
-    "id": "ttknx_debug00001",
+    "id": "ttknx_debug00002",
     "type": "debug",
     "z": "ttknx_tab0000001",
-    "name": "Log zdarzeń",
+    "name": "Log błędów",
     "active": true,
     "tosidebar": true,
     "console": true,
     "tostatus": false,
-    "complete": "payload",
+    "complete": "error",
     "targetType": "msg",
     "statusVal": "",
     "statusType": "auto",
-    "x": 730,
-    "y": 340,
+    "x": 380,
+    "y": 800,
     "wires": []
-  },
-  {
-    "id": "ttknx_cmt0000004",
-    "type": "comment",
-    "z": "ttknx_tab0000001",
-    "name": "④ WŁĄCZ / WYŁĄCZ automatykę z KNX (np. urlop, goście, sprzątanie)",
-    "info": "",
-    "x": 330,
-    "y": 360,
-    "wires": []
-  },
-  {
-    "id": "ttknx_knx_enabl01",
-    "type": "knxUltimate",
-    "z": "ttknx_tab0000001",
-    "server": "ttknx_knxcfg0001",
-    "topic": "7/4/0",
-    "setTopicType": "str",
-    "outputtopic": "",
-    "dpt": "1.001",
-    "initialread": 1,
-    "notifyreadrequest": false,
-    "notifyresponse": true,
-    "notifywrite": true,
-    "notifyreadrequestalsorespondtobus": false,
-    "notifyreadrequestalsorespondtobusdefaultvalueifnotinitialized": "0",
-    "name": "Automatyka wł/wył (7/4/0)",
-    "outputtype": "write",
-    "outputRBE": "false",
-    "inputRBE": "false",
-    "formatmultiplyvalue": 1,
-    "formatnegativevalue": "leave",
-    "formatdecimalsvalue": 999,
-    "passthrough": "no",
-    "sendMsgToKNXCode": "",
-    "receiveMsgFromKNXCode": "",
-    "listenallga": "",
-    "gaSecure": false,
-    "buttonEnabled": false,
-    "buttonMode": "toggle",
-    "buttonStaticValue": "",
-    "buttonToggleInitial": "false",
-    "periodicSend": false,
-    "periodicSendInterval": 60,
-    "x": 190,
-    "y": 400,
-    "wires": [
-      [
-        "ttknx_fn_enable01"
-      ]
-    ]
-  },
-  {
-    "id": "ttknx_fn_enable01",
-    "type": "function",
-    "z": "ttknx_tab0000001",
-    "name": "Zapamiętaj stan",
-    "func": "// Zapamiętuje stan GA \"automatyka włączona\" (DPT 1.001) odebrany z KNX.\nconst wl = msg.payload === true || msg.payload === 1 || msg.payload === 'true';\nflow.set('automatykaWlaczona', wl);\nnode.status({ fill: wl ? 'green' : 'red', shape: 'dot', text: wl ? 'automatyka WŁ' : 'automatyka WYŁ' });\nreturn null;\n",
-    "outputs": 1,
-    "timeout": 0,
-    "noerr": 0,
-    "initialize": "",
-    "finalize": "",
-    "libs": [],
-    "outputLabels": [],
-    "x": 440,
-    "y": 400,
-    "wires": [
-      []
-    ]
-  },
-  {
-    "id": "ttknx_cmt0000005",
-    "type": "comment",
-    "z": "ttknx_tab0000001",
-    "name": "⑤ TESTY – kliknij przycisk po lewej, wynik w zakładce Debug (🐞)",
-    "info": "",
-    "x": 330,
-    "y": 460,
-    "wires": []
-  },
-  {
-    "id": "ttknx_inj_test01",
-    "type": "inject",
-    "z": "ttknx_tab0000001",
-    "name": "TEST: odcisk palca „Anna”",
-    "props": [
-      {
-        "p": "topic",
-        "vt": "str"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.5,
-    "topic": "palec",
-    "x": 180,
-    "y": 500,
-    "wires": [
-      [
-        "ttknx_fn_sim00001"
-      ]
-    ]
-  },
-  {
-    "id": "ttknx_inj_test02",
-    "type": "inject",
-    "z": "ttknx_tab0000001",
-    "name": "TEST: kod PIN „Piotr”",
-    "props": [
-      {
-        "p": "topic",
-        "vt": "str"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.5,
-    "topic": "pin",
-    "x": 170,
-    "y": 540,
-    "wires": [
-      [
-        "ttknx_fn_sim00001"
-      ]
-    ]
-  },
-  {
-    "id": "ttknx_inj_test03",
-    "type": "inject",
-    "z": "ttknx_tab0000001",
-    "name": "TEST: otwarcie od środka",
-    "props": [
-      {
-        "p": "topic",
-        "vt": "str"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.5,
-    "topic": "srodek",
-    "x": 170,
-    "y": 580,
-    "wires": [
-      [
-        "ttknx_fn_sim00001"
-      ]
-    ]
-  },
-  {
-    "id": "ttknx_inj_test04",
-    "type": "inject",
-    "z": "ttknx_tab0000001",
-    "name": "TEST: nieznany brelok",
-    "props": [
-      {
-        "p": "topic",
-        "vt": "str"
-      }
-    ],
-    "repeat": "",
-    "crontab": "",
-    "once": false,
-    "onceDelay": 0.5,
-    "topic": "nieznany",
-    "x": 160,
-    "y": 620,
-    "wires": [
-      [
-        "ttknx_fn_sim00001"
-      ]
-    ]
-  },
-  {
-    "id": "ttknx_fn_sim00001",
-    "type": "function",
-    "z": "ttknx_tab0000001",
-    "name": "Symulacja callbacku",
-    "func": "// Symuluje callback z chmury TTLock – do testów bez zamka.\nconst cfg = flow.get('config') || {};\nconst lockId = cfg.lockId || '1234567';\nconst teraz = Date.now();\nconst scenariusze = {\n    palec:    { recordType: 8,  username: 'Anna - kciuk',  keyboardPwd: '44668054142981' },\n    pin:      { recordType: 4,  username: 'Piotr kod',     keyboardPwd: '123456' },\n    srodek:   { recordType: 32, username: '',              keyboardPwd: '' },\n    nieznany: { recordType: 7,  username: 'Gosc brelok',   keyboardPwd: '0012345678' },\n};\nconst s = scenariusze[msg.topic] || scenariusze.palec;\nmsg.payload = {\n    lockId: String(lockId),\n    notifyType: '1',\n    lockMac: 'AA:BB:CC:DD:EE:FF',\n    records: JSON.stringify([Object.assign({\n        lockId: Number(lockId), success: 1, lockDate: teraz - 2000,\n        serverDate: teraz - 500, electricQuantity: 100,\n    }, s)]),\n};\nreturn msg;\n",
-    "outputs": 1,
-    "timeout": 0,
-    "noerr": 0,
-    "initialize": "",
-    "finalize": "",
-    "libs": [],
-    "outputLabels": [],
-    "x": 440,
-    "y": 560,
-    "wires": [
-      [
-        "ttknx_fn_parse001"
-      ]
-    ]
   },
   {
     "id": "ttknx_knxcfg0001",

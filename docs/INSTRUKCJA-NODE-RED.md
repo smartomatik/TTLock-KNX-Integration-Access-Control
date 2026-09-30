@@ -8,7 +8,7 @@ Czas pracy to około 2–3 godziny, nie licząc oczekiwania na zatwierdzenie kon
 |---|---|
 | A. Przygotowanie (biuro) | 1 Konto deweloperskie · 2 Nazwy w aplikacji · 3 Test API |
 | B. ETS | 4 Adresy grup i sceny |
-| C. Node-RED (obiekt) | 5 Instalacja (Raspberry Pi / Docker / Home Assistant) · 6 Hasło · 7 knx-ultimate · 8 Import flow · 9 Interfejs KNX · 10 Konfiguracja osób · 11 Test lokalny |
+| C. Node-RED (obiekt) | 5 Instalacja (Raspberry Pi / Docker / Home Assistant) · 6 Hasło · 7 knx-ultimate · 8 Import flow · 9 Interfejs KNX · 10 Konfiguracja osób · 10a Serwis (dane TTLock) · 11 Test lokalny |
 | D. Połączenie z chmurą | 12 Sekretny adres · 13 Publiczny adres HTTPS (Cloudflare / Tailscale / przekierowanie portów) · 14 Callback URL w TTLock · 15 Test z drzwi |
 | E. Przekazanie | 16 Obsługa na co dzień · 17 Rozwiązywanie problemów |
 
@@ -87,6 +87,7 @@ Utwórz adresy grup (propozycja, grupa główna 7 = Dostęp/Obecność):
 | **7/2/0** | 16.001 (tekst 14 znaków) | „Ostatnio otworzył”, do wizualizacji lub panelu dotykowego |
 | **7/3/1 … 7/3/10** | 1.001 (przełącznik) | **Wyzwalacz osoby 1 … 10**: `1` przy każdym otwarciu przez tę osobę |
 | **7/4/0** | 1.001 (przełącznik) | Automatyka wł./wył. (urlop, goście, sprzątanie). **Ustaw flagę odczytu (R)** na jednym obiekcie, aby Node-RED mógł odczytać stan po starcie. |
+| **7/4/1** | 1.001 (przełącznik) | **Integracja OK**: `1` sprawna, `0` awaria (bramka offline, złe hasło, brak internetu). Wysyłane co 6 h, patrz krok 10a. Pokaż na wizualizacji lub użyj do powiadomienia. |
 
 Przykład:
 
@@ -204,7 +205,12 @@ Twój adres callbacku: `https://drzwi.twojadomena.pl/endpoint/ttlock/<twój-sekr
        users: [{ username: "admin", password: "WKLEJ_SKRÓT_TUTAJ", permissions: "*" }]
    },
    ```
-4. Zrestartuj Node-RED:
+4. W tym samym pliku ustaw **klucz szyfrowania danych logowania**. Bez niego Node-RED tworzy klucz losowo w ukrytym pliku, a jego utrata oznacza utratę zapisanych haseł (TTLock, keyring KNX). Wygeneruj klucz (`openssl rand -hex 24`) i wpisz:
+   ```js
+   credentialSecret: "WKLEJ_WYGENEROWANY_KLUCZ",
+   ```
+   Zapisz go w menedżerze haseł i **nigdy go nie zmieniaj**.
+5. Zrestartuj Node-RED:
    - Opcja A: `sudo systemctl restart nodered`
    - Opcja B: `docker restart node-red`
 
@@ -216,16 +222,19 @@ W edytorze: **Menu (☰) → Manage palette → Install** → wpisz `node-red-co
 2. Kliknij **Import**. Pojawi się zakładka **TTLock → KNX**.
 3. Kliknij **Deploy** (czerwony przycisk w prawym górnym rogu).
 
-Flow składa się z sześciu części:
+Flow składa się z siedmiu części:
 
 | Część | Co robi |
 |---|---|
-| ① KONFIGURACJA | 10 miejsc na osoby, sceny, lockId |
-| ② Callback TTLock | odbiera zdarzenia z chmury i odpowiada `success` |
+| ① KONFIGURACJA | 10 miejsc na osoby, sceny, lockId. Błędna konfiguracja jest odrzucana (czerwony status). |
+| ② Callback TTLock | odbiera zdarzenia z chmury i zawsze odpowiada `success` |
 | ③ Wyjścia KNX | scena (7/1/0) i tekst (7/2/0) |
 | ④ Automatyka wł./wył. | nasłuchuje GA 7/4/0 |
 | ⑤ Testy | przyciski symulujące otwarcie drzwi |
 | ⑥ Wyzwalacze osób | 10 węzłów KNX „Osoba N otworzyła” (7/3/1 … 7/3/10) |
+| ⑦ Serwis | co 6 h: odświeżenie tokenu TTLock, kontrola bramki i zegara → „Integracja OK” (7/4/1). Dodatkowo „Log błędów” zbiera wszystkie błędy zakładki. |
+
+Ponowny import nowszej wersji flow **zastępuje** istniejącą zakładkę, bo węzły mają stałe identyfikatory. Przed importem skopiuj swoją listę osób z ⚙ KONFIGURACJA i wklej ją z powrotem po imporcie.
 
 ### Krok 9 – Interfejs KNX IP
 1. Kliknij dwukrotnie węzeł **Scena przyjścia (7/1/0)**, a następnie ołówek przy **Gateway: Interfejs KNX IP**.
@@ -235,7 +244,7 @@ Flow składa się z sześciu części:
    - **Protokół:** `TunnelUDP`, a przy KNX Secure `TunnelTCP`
    - **Interfejs sieciowy:** zwykle `Auto`
 3. **KNX Secure:** w zakładce Secure wskaż plik keyringu `.knxkeys`, podaj hasło i wybierz adres tunelu.
-4. Sprawdź adresy grup w węzłach KNX: scena 7/1/0, tekst 7/2/0, automatyka 7/4/0 i 10 wyzwalaczy 7/3/1 … 7/3/10. Jeśli w ETS używasz innych adresów, popraw je tutaj. Nieużywane wyzwalacze możesz zostawić, bo bez przypisanej osoby nic nie wysyłają.
+4. Sprawdź adresy grup w węzłach KNX: scena 7/1/0, tekst 7/2/0, automatyka 7/4/0, integracja OK 7/4/1 i 10 wyzwalaczy 7/3/1 … 7/3/10. Jeśli w ETS używasz innych adresów, popraw je tutaj. Nieużywane wyzwalacze możesz zostawić, bo bez przypisanej osoby nic nie wysyłają.
    - Możesz też zaimportować adresy z ETS w węźle gateway (ETS CSV).
 5. Kliknij **Deploy**. Pod węzłami KNX powinien pojawić się zielony status połączenia.
 
@@ -261,6 +270,33 @@ osoby: [
 - Typ **1** (aplikacja) i **12** (zdalnie przez bramkę) dodaj dopiero po teście z kroku 15, bo nie zawsze wysyłają callback.
 
 Kliknij **Done**, a następnie **Deploy**. Pod węzłem pojawi się np. „3/10 osób, zamek 1234567”.
+Jeśli status jest **czerwony**, konfiguracja zawiera błąd (np. scena 70, powtórzony klucz, litery w lockId). Opis błędu jest w statusie i w panelu Debug. Do czasu poprawki działa poprzednia poprawna konfiguracja.
+
+### Krok 10a – Dane TTLock dla serwisu (zalecane przy pracy wieloletniej)
+Serwis (część ⑦) co 6 godzin:
+- loguje się do TTLock i **odświeża token administratora**, więc callbacki nie wygasają,
+- sprawdza, czy bramka widzi czytnik,
+- kontroluje zegar komputera.
+
+Wynik wysyła na **GA 7/4/1 „Integracja OK”**. Bez tych danych serwis jest wyłączony (żółty status) i token trzeba odnawiać ręcznie skryptem co ~2 miesiące.
+
+1. Kliknij dwukrotnie **nazwę zakładki „TTLock → KNX”** u góry edytora.
+2. W sekcji **Environment Variables** (Zmienne środowiskowe) są cztery pozycje typu *credential*. Uzupełnij je:
+
+| Zmienna | Wartość |
+|---|---|
+| `TTLOCK_CLIENT_ID` | clientId z kroku 1 |
+| `TTLOCK_CLIENT_SECRET` | clientSecret z kroku 1 |
+| `TTLOCK_USER` | login administratora zamka (aplikacja SX) |
+| `TTLOCK_PASS` | hasło administratora zamka |
+
+3. Kliknij **Done**, a następnie **Deploy**. Po ok. minucie węzeł **Serwis TTLock** pokaże np. „OK: token ważny 90 dni | bramka -62 dBm”.
+
+Wartości typu *credential* są przechowywane zaszyfrowane (plik `flows_cred.json`). Nie trafiają do eksportu flow ani do kopii `flows.json`.
+
+**Zmiana hasła administratora** w aplikacji SX wymaga wpisania nowego hasła tutaj. Do tego czasu 7/4/1 = 0.
+
+W ETS połącz **7/4/1** (DPT 1.001) z wizualizacją lub logiką alarmową, np. komunikat „Integracja drzwi – sprawdź” przy wartości `0`. Wartość `0` pojawia się dopiero po dwóch kolejnych nieudanych kontrolach (ok. 12 h), więc krótka przerwa internetu nie alarmuje.
 
 ### Krok 11 – Test lokalny (bez zamka)
 1. Otwórz panel **Debug** (ikona 🐞 po prawej).
@@ -464,9 +500,11 @@ Na koniec wpisz **lockId** w KONFIGURACJI (jeśli jeszcze go nie ma) i kliknij *
 | Nowa osoba (maks. 10) | W aplikacji SX dodaj odcisk lub kartę z nazwą `Imię - opis`. W ⚙ KONFIGURACJA wpisz `klucz` i `nazwa` w wolnym miejscu i kliknij Deploy. W ETS zaprogramuj scenę lub logikę dla jej wyzwalacza 7/3/n. |
 | Usunięcie osoby | Usuń odcisk lub kartę w aplikacji i ustaw `klucz: ''` w jej miejscu. |
 | Urlop, goście, sprzątanie | Wyłącz automatykę przyciskiem lub w wizualizacji (GA 7/4/0). |
-| Kopia zapasowa | Menu → Export → All flows → zapisz plik JSON. |
+| Kopia zapasowa | Skopiuj **cały katalog danych** Node-RED, bo zawiera zaszyfrowane hasła i klucz. Szczegóły w [UTRZYMANIE.md](UTRZYMANIE.md). |
 
-**Token administratora:** token TTLock jest ważny 90 dni. Nie wiadomo, czy callbacki działają po jego wygaśnięciu (do sprawdzenia na obiekcie). Na wszelki wypadek co ~2 miesiące uruchom `python3 tools/ttlock_test.py records`, co odnawia logowanie.
+**Token administratora:** token TTLock jest ważny 90 dni. Serwis (krok 10a) odnawia go automatycznie co 6 h. Jeśli serwis nie jest skonfigurowany, co ~2 miesiące uruchom `python3 tools/ttlock_test.py records`.
+
+**Praca wieloletnia:** plan utrzymania, kopie zapasowe, aktualizacje i coroczny przegląd są w [UTRZYMANIE.md](UTRZYMANIE.md).
 
 ### Krok 17 – Rozwiązywanie problemów
 | Objaw | Przyczyna / rozwiązanie |
@@ -480,6 +518,12 @@ Na koniec wpisz **lockId** w KONFIGURACJI (jeśli jeszcze go nie ma) i kliknij *
 | `nieznana osoba "xyz"` | Dodaj klucz `xyz` w KONFIGURACJI albo popraw nazwę w aplikacji. |
 | `rekord zbyt stary` | Bramka była offline i wysłała zaległe zdarzenia. To zamierzone zachowanie. Zwiększ `maksWiekMinut`, jeśli trzeba. |
 | `automatyka wyłączona z KNX` | GA 7/4/0 = 0. Włącz automatykę. |
+| Serwis: żółty „wyłączony” | Brak danych TTLock w zmiennych zakładki (krok 10a). |
+| Serwis: „logowanie TTLock nieudane” | Błędny clientId lub clientSecret, albo administrator zmienił hasło w aplikacji. Popraw w kroku 10a. |
+| Serwis: „żadna bramka nie widzi czytnika” | Bramka bez zasilania lub Wi-Fi, albo za daleko od czytnika. Sprawdź w aplikacji SX. |
+| Serwis: „zegar komputera różni się” | Brak synchronizacji czasu (NTP). Na Pi/Debian: `timedatectl` powinien pokazać „System clock synchronized: yes”. |
+| Węzeł Serwis TTLock: błąd modułu (`crypto`/`https`) | W `settings.js` ustawiono `functionExternalModules: false`. Zmień na `true` i zrestartuj Node-RED. |
+| Czerwony status ⚙ KONFIGURACJA | Błąd w konfiguracji (opis w statusie i w Debug). Działa poprzednia poprawna konfiguracja. |
 | Węzły KNX czerwone lub „disconnected” | Zły adres IP lub protokół interfejsu, brak wolnego tunelu, albo błąd keyringu przy Secure. |
 | Scena przychodzi, ale nic się nie dzieje | Obiekty scen aktorów nie są połączone z 7/1/0 albo numer sceny w aktorze jest inny. |
 | Ta sama osoba dwa razy – scena tylko raz | Zamierzone, jeśli to ten sam rekord (duplikat z chmury). Różne otwarcia działają zawsze. |
