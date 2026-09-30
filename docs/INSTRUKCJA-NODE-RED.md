@@ -85,7 +85,7 @@ Utwórz adresy grup (propozycja, grupa główna 7 = Dostęp/Obecność):
 
 | GA | Typ (DPT) | Funkcja |
 |---|---|---|
-| **7/1/0** | 18.001 (sterowanie sceną) | Scena przyjścia. Numer sceny = osoby (domyślnie osoba 1 → scena 1 … osoba 10 → scena 10). |
+| **7/1/0** | 18.001 (sterowanie sceną) | Scena przyjścia: numer sceny tej osoby (domyślnie osoba 1 → scena 1 … osoba 10 → scena 10). |
 | **7/2/0** | 16.001 (tekst 14 znaków) | „Ostatnio otworzył”, do wizualizacji lub panelu dotykowego |
 | **7/3/1 … 7/3/10** | 1.001 (przełącznik) | **Wyzwalacz osoby 1 … 10**: `1` przy każdym otwarciu przez tę osobę |
 | **7/4/0** | 1.001 (przełącznik) | Automatyka wł./wył. (urlop, goście, sprzątanie). **Ustaw flagę odczytu (R)** na jednym obiekcie, aby Node-RED mógł odczytać stan po starcie. |
