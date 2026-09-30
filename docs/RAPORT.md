@@ -142,6 +142,7 @@ Node-RED z gotowym flow z tego repozytorium. Szczegóły w [INSTRUKCJA-NODE-RED.
 | 7/2/0 | 16.001 | „Ostatnio otworzył” (14 znaków) |
 | 7/3/1 … 7/3/10 | 1.001 | Wyzwalacz osoby 1 … 10 |
 | 7/4/0 | 1.001 | Automatyka wł./wył. (urlop, goście, sprzątanie) |
+| 7/4/1 | 1.001 | Integracja OK (samokontrola co 6 h: token TTLock, bramka, zegar) |
 
 ---
 
