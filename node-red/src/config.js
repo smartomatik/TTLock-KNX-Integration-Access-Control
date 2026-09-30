@@ -62,8 +62,13 @@ const bledy = [];
 const lockId = String(config.lockId === undefined || config.lockId === null ? '' : config.lockId).trim();
 if (lockId && !/^\d+$/.test(lockId)) bledy.push('lockId może zawierać tylko cyfry');
 
-const lockMac = String(config.lockMac || '').toUpperCase().replace(/[^0-9A-F]/g, '');
-if (lockMac && lockMac.length !== 12) bledy.push('lockMac musi mieć 12 znaków szesnastkowych, np. C5:40:E0:9C:8C:C1');
+// Sprawdzamy surowy tekst PRZED normalizacją – inaczej np. 'XYZ' dałoby pusty MAC
+// i po cichu wyłączyło kontrolę.
+const lockMacSurowy = String(config.lockMac === undefined || config.lockMac === null ? '' : config.lockMac).trim();
+if (lockMacSurowy && !/^([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}$/.test(lockMacSurowy)) {
+    bledy.push('lockMac nie wygląda jak adres MAC, np. C5:40:E0:9C:8C:C1 (albo zostaw puste)');
+}
+const lockMac = lockMacSurowy.toUpperCase().replace(/[^0-9A-F]/g, '');
 
 const maksWiekMinut = Number(config.maksWiekMinut);
 if (!(Number.isFinite(maksWiekMinut) && maksWiekMinut >= 1 && maksWiekMinut <= 1440)) {

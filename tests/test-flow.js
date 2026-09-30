@@ -257,6 +257,23 @@ test('2.1 błędny lockMac w konfiguracji jest odrzucany', async () => {
     const s = srodowisko(); await wczytajConfig(s, { [MAC]: "lockMac: 'C5:40:E0'," });
     oczekuj(!s.flowCtx.get('config'), 'zaakceptowano krótki MAC');
 });
+test('2.1.1 lockMac bez znaków szesnastkowych NIE wyłącza kontroli po cichu', async () => {
+    for (const v of ['XYZ', 'ZZ:ZZ:ZZ:ZZ:ZZ:ZZ', 'brak', 'C5:40:E0:9C:8C', 'C5:40:E0:9C:8C:C1:00', 'G5:40:E0:9C:8C:C1', 'C5 40 E0 9C 8C C1']) {
+        const s = srodowisko(); await wczytajConfig(s, { [MAC]: `lockMac: ${JSON.stringify(v)},` });
+        oczekuj(!s.flowCtx.get('config') && s.logi.some(l => l[0] === 'error'), 'zaakceptowano: ' + v);
+    }
+});
+test('2.1.1 poprawne zapisy lockMac są akceptowane i normalizowane', async () => {
+    for (const v of ['C5:40:E0:9C:8C:C1', 'c5-40-e0-9c-8c-c1', 'C540E09C8CC1', '  C5:40:E0:9C:8C:C1  ']) {
+        const s = srodowisko(); await wczytajConfig(s, { [MAC]: `lockMac: ${JSON.stringify(v)},` });
+        const c = s.flowCtx.get('config');
+        oczekuj(c && c.lockMac === 'C540E09C8CC1', 'odrzucono: ' + v);
+    }
+});
+test('2.1.1 puste lockMac = bez kontroli MAC (świadomie)', async () => {
+    const s = srodowisko(); await wczytajConfig(s);
+    oczekuj(s.flowCtx.get('config').lockMac === '', 'pusty MAC');
+});
 test('2.1 przycisk TEST przechodzi kontrolę lockMac', async () => {
     const s = await przygotuj({ [MAC]: "lockMac: 'C5:40:E0:9C:8C:C1'," });
     const sim = await uruchom('ttknx_fn_sim00001', s, { topic: 'palec' });
