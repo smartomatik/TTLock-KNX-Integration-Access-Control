@@ -1,17 +1,36 @@
 // Odbiera callback TTLock "Lock Records Notify", filtruje i mapuje osobę na automatykę.
 // Wyjścia: 1 = odpowiedź HTTP "success", 2 = scena KNX, 3 = tekst KNX,
 //          4 = wyzwalacz osoby (msg.miejsce 1–10), 5 = log
+// Wszystkie 61 typów z dokumentacji TTLock "Record type of cloud" (tylko do opisu w logu).
 const TYPY = {
-    1: 'aplikacja (eKey)', 4: 'kod PIN', 7: 'karta/brelok RFID', 8: 'odcisk palca',
-    10: 'klucz mechaniczny', 11: 'zamknięcie z aplikacji', 12: 'zdalnie przez bramkę',
-    29: 'otwarcie siłowe', 32: 'otwarcie od środka', 44: 'sabotaż', 45: 'autozamykanie',
-    46: 'przycisk otwierania', 48: 'blokada po błędnych próbach', 55: 'pilot',
-    65: 'nieudane otwarcie', 92: 'kod administratora',
+    1: 'aplikacja (eKey)', 4: 'kod PIN', 5: 'podniesienie (parking)', 6: 'opuszczenie (parking)',
+    7: 'karta/brelok RFID', 8: 'odcisk palca', 9: 'opaska', 10: 'klucz mechaniczny',
+    11: 'zamknięcie z aplikacji', 12: 'zdalnie przez bramkę', 29: 'otwarcie siłowe',
+    30: 'czujnik drzwi: zamknięte', 31: 'czujnik drzwi: otwarte', 32: 'otwarcie od środka',
+    33: 'zamknięcie odciskiem', 34: 'zamknięcie kodem', 35: 'zamknięcie kartą', 36: 'zamknięcie kluczem',
+    37: 'sterowanie przyciskiem w aplikacji', 42: 'nowa poczta lokalna', 43: 'nowa poczta z innego miasta',
+    44: 'sabotaż', 45: 'autozamykanie', 46: 'przycisk otwierania', 47: 'przycisk zamykania',
+    48: 'blokada po błędnych próbach', 49: 'karta hotelowa', 50: 'otwarcie z powodu wysokiej temperatury',
+    51: 'próba usuniętą kartą', 52: 'blokada (dead lock) z aplikacji', 53: 'blokada (dead lock) kodem',
+    54: 'samochód wyjechał (parking)', 55: 'pilot', 57: 'kod QR', 58: 'kod QR wygasły – nieudane',
+    59: 'podwójne zamknięcie', 60: 'anulowanie podwójnego zamknięcia', 61: 'zamknięcie kodem QR',
+    62: 'kod QR – zamek podwójnie zamknięty', 63: 'autootwarcie (tryb przejścia)',
+    64: 'alarm: drzwi niezamknięte', 65: 'nieudane otwarcie', 66: 'nieudane zamknięcie', 67: 'twarz',
+    68: 'twarz – zamknięte od środka', 69: 'zamknięcie twarzą', 71: 'twarz – nieważna',
+    75: 'udzielenie z aplikacji', 76: 'udzielenie zdalne',
+    77: 'podwójna autoryzacja: Bluetooth – czeka na 2. osobę', 78: 'podwójna autoryzacja: kod – czeka na 2. osobę',
+    79: 'podwójna autoryzacja: odcisk – czeka na 2. osobę', 80: 'podwójna autoryzacja: karta – czeka na 2. osobę',
+    81: 'podwójna autoryzacja: twarz – czeka na 2. osobę', 82: 'podwójna autoryzacja: pilot – czeka na 2. osobę',
+    83: 'podwójna autoryzacja: żyły dłoni – czeka na 2. osobę',
+    84: 'żyły dłoni', 85: 'żyły dłoni', 86: 'zamknięcie żyłami dłoni', 88: 'żyły dłoni – nieważne',
+    92: 'kod administratora',
 };
-const TYPY_PIN = [4, 34, 92];   // w tych rekordach keyboardPwd zawiera prawdziwy PIN
+// W tych rekordach keyboardPwd może zawierać prawdziwy PIN – zawsze maskowany w logu.
+const TYPY_PIN = [4, 34, 53, 78, 92];
 const MAKS_REKORDOW = 50;       // ochrona przed zalaniem dużym zapytaniem
 const PAMIEC_DUPLIKATOW = 500;  // ile ostatnich rekordów pamiętać
-const ZEGAR_TOLERANCJA_MS = 5 * 60000;
+const ZEGAR_TOLERANCJA_MS = 5 * 60000;     // do 5 min w przyszłości: bez uwag
+const PRZYSZLOSC_MAKS_MS = 60 * 60000;     // ponad 1 h w przyszłości: rekord niewiarygodny
 
 function bezOgonkow(t) {
     return String(t).replace(/ł/g, 'l').replace(/Ł/g, 'L')
@@ -27,6 +46,9 @@ function maskuj(r) {
     const kopia = Object.assign({}, r);
     if (TYPY_PIN.includes(Number(r.recordType)) && kopia.keyboardPwd) kopia.keyboardPwd = '****';
     return kopia;
+}
+function normalizujMac(m) {
+    return String(m === undefined || m === null ? '' : m).toUpperCase().replace(/[^0-9A-F]/g, '');
 }
 function czytajRekordy(pole) {
     let v = pole;
@@ -52,6 +74,9 @@ function przetworz() {
     if (cfg.lockId && lockId !== cfg.lockId) {
         return [odpowiedz, null, null, null, { payload: `Obcy lockId "${lockId}" – zignorowano` }];
     }
+    if (cfg.lockMac && normalizujMac(body.lockMac) !== cfg.lockMac) {
+        return [odpowiedz, null, null, null, { payload: `Niezgodny lockMac "${body.lockMac || '(brak)'}" – zignorowano` }];
+    }
     if (body.notifyType !== undefined && String(body.notifyType) !== '1') {
         return [odpowiedz, null, null, null, { payload: `notifyType=${body.notifyType} (to nie rekord otwarcia) – pominięto` }];
     }
@@ -72,7 +97,11 @@ function przetworz() {
     const widziane = flow.get('widziane') || [];
     const teraz = Date.now();
     const sceny = [], teksty = [], wyzwalacze = [];
-    const uwagaLock = cfg.lockId ? '' : ' | UWAGA: lockId nieustawiony';
+    // Tryb nauki: bez lockId zdarzenia z chmury tylko logujemy (przyciski TEST nie mają msg.res).
+    const trybNauki = !cfg.lockId && !!msg.res;
+    const uwagaLock = cfg.lockId ? ''
+        : (msg.res ? ` | TRYB NAUKI: wpisz lockId '${lockId}' i lockMac '${body.lockMac || ''}' w KONFIGURACJI`
+            : ' | TEST (lockId nieustawiony – zdarzenia z chmury tylko w logu)');
 
     for (const r of rekordy) {
         const typ = Number(r.recordType);
@@ -93,8 +122,10 @@ function przetworz() {
         else if (Number(r.success) !== 1) decyzja = 'nieudana próba – pominięto';
         else if (!cfg.typyPrzyjscia.includes(typ)) decyzja = 'ten typ nie uruchamia automatyki';
         else if (wiek > cfg.maksWiekMinut * 60000) decyzja = 'rekord zbyt stary – pominięto';
+        else if (wiek < -PRZYSZLOSC_MAKS_MS) decyzja = 'czas rekordu ponad 1 h w przyszłości – niewiarygodny, pominięto';
         else if (!osoba) decyzja = `nieznana osoba "${osobaKlucz}" – dodaj ją w KONFIGURACJI`;
         else if (!wlaczona) decyzja = 'automatyka wyłączona z KNX – pominięto';
+        else if (trybNauki) decyzja = `rozpoznano OSOBĘ ${miejsce}, ale TRYB NAUKI – KNX nie wysłany`;
         else {
             decyzja = `OSOBA ${miejsce} (7/3/${miejsce})` + (osoba.scena ? `, SCENA ${osoba.scena}` : '');
             if (osoba.scena) sceny.push({ payload: { save_recall: 0, scenenumber: osoba.scena }, osoba: osoba.nazwa });
@@ -102,13 +133,15 @@ function przetworz() {
             teksty.push({ payload: tekstKnx(osoba.nazwa) });
         }
         if (Number.isFinite(czasSerwera) && czasSerwera > 0) widziane.push(id);
-        if (wiek < -ZEGAR_TOLERANCJA_MS) decyzja += ' | UWAGA: zegar komputera spóźnia się – sprawdź NTP';
+        if (wiek < -ZEGAR_TOLERANCJA_MS && wiek >= -PRZYSZLOSC_MAKS_MS) decyzja += ' | UWAGA: zegar komputera spóźnia się – sprawdź NTP';
+        // recordTypeFromLock = co fizycznie zrobił zamek (może różnić się od typu z chmury) – do diagnostyki
+        const zZamka = r.recordTypeFromLock !== undefined && r.recordTypeFromLock !== null ? ` (zamek: ${r.recordTypeFromLock})` : '';
 
         const czas = Number.isFinite(czasZamka) && czasZamka > 0
             ? new Date(czasZamka).toLocaleString('pl-PL') : '(brak czasu)';
         const opoznienie = Number.isFinite(wiek) ? `${(wiek / 1000).toFixed(1)} s` : '?';
         logi.push({
-            payload: `${czas} | ${TYPY[typ] || 'typ ' + typ} | "${nazwa}" | ${decyzja} | opóźnienie ${opoznienie}${uwagaLock}`,
+            payload: `${czas} | ${TYPY[typ] || 'typ ' + typ}${zZamka} | "${nazwa}" | ${decyzja} | opóźnienie ${opoznienie}${uwagaLock}`,
             rekord: maskuj(r),
         });
     }

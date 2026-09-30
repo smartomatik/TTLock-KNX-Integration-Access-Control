@@ -30,6 +30,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -39,37 +40,38 @@ API = "https://euapi.ttlock.com"
 
 # Typy rekordów z chmury (dokumentacja TTLock "Record type of cloud").
 RECORD_TYPES = {
-    1: "otwarcie z aplikacji (eKey)",
-    4: "otwarcie kodem PIN",
-    7: "otwarcie kartą/brelokiem",
-    8: "otwarcie odciskiem palca",
-    9: "otwarcie opaską",
-    10: "otwarcie kluczem mechanicznym",
-    11: "zamknięcie z aplikacji",
-    12: "otwarcie zdalne przez bramkę",
-    29: "otwarcie siłowe",
-    30: "czujnik drzwi: zamknięte",
-    31: "czujnik drzwi: otwarte",
-    32: "otwarcie od środka",
-    33: "zamknięcie odciskiem",
-    34: "zamknięcie kodem",
-    35: "zamknięcie kartą",
-    36: "zamknięcie kluczem",
-    44: "alarm sabotażowy",
-    45: "autozamykanie",
-    46: "przycisk otwierania",
-    47: "przycisk zamykania",
-    48: "blokada po błędnych próbach",
-    55: "otwarcie pilotem",
-    57: "otwarcie kodem QR",
-    63: "autootwarcie (tryb przejścia)",
-    65: "nieudane otwarcie",
-    67: "otwarcie twarzą",
-    75: "otwarcie przez udzielenie z aplikacji",
+    1: "otwarcie z aplikacji (eKey)", 4: "otwarcie kodem PIN",
+    5: "podniesienie (parking)", 6: "opuszczenie (parking)",
+    7: "otwarcie kartą/brelokiem", 8: "otwarcie odciskiem palca", 9: "otwarcie opaską",
+    10: "otwarcie kluczem mechanicznym", 11: "zamknięcie z aplikacji",
+    12: "otwarcie zdalne przez bramkę", 29: "otwarcie siłowe",
+    30: "czujnik drzwi: zamknięte", 31: "czujnik drzwi: otwarte", 32: "otwarcie od środka",
+    33: "zamknięcie odciskiem", 34: "zamknięcie kodem", 35: "zamknięcie kartą",
+    36: "zamknięcie kluczem", 37: "sterowanie przyciskiem w aplikacji",
+    42: "nowa poczta lokalna", 43: "nowa poczta z innego miasta", 44: "alarm sabotażowy",
+    45: "autozamykanie", 46: "przycisk otwierania", 47: "przycisk zamykania",
+    48: "blokada po błędnych próbach", 49: "otwarcie kartą hotelową",
+    50: "otwarcie z powodu wysokiej temperatury", 51: "próba usuniętą kartą",
+    52: "blokada (dead lock) z aplikacji", 53: "blokada (dead lock) kodem",
+    54: "samochód wyjechał (parking)", 55: "otwarcie pilotem", 57: "otwarcie kodem QR",
+    58: "kod QR wygasły – nieudane", 59: "podwójne zamknięcie",
+    60: "anulowanie podwójnego zamknięcia", 61: "zamknięcie kodem QR",
+    62: "kod QR – zamek podwójnie zamknięty", 63: "autootwarcie (tryb przejścia)",
+    64: "alarm: drzwi niezamknięte", 65: "nieudane otwarcie", 66: "nieudane zamknięcie",
+    67: "otwarcie twarzą", 68: "twarz – zamknięte od środka", 69: "zamknięcie twarzą",
+    71: "twarz – nieważna", 75: "otwarcie przez udzielenie z aplikacji",
     76: "otwarcie przez zdalne udzielenie",
-    92: "otwarcie kodem administratora",
+    77: "podw. autoryzacja: Bluetooth – czeka na 2. osobę",
+    78: "podw. autoryzacja: kod – czeka na 2. osobę",
+    79: "podw. autoryzacja: odcisk – czeka na 2. osobę",
+    80: "podw. autoryzacja: karta – czeka na 2. osobę",
+    81: "podw. autoryzacja: twarz – czeka na 2. osobę",
+    82: "podw. autoryzacja: pilot – czeka na 2. osobę",
+    83: "podw. autoryzacja: żyły dłoni – czeka na 2. osobę",
+    84: "otwarcie żyłami dłoni", 85: "otwarcie żyłami dłoni", 86: "zamknięcie żyłami dłoni",
+    88: "żyły dłoni – nieważne", 92: "otwarcie kodem administratora",
 }
-PASSCODE_TYPES = {4, 34, 92}  # w tych rekordach keyboardPwd zawiera prawdziwy PIN
+PASSCODE_TYPES = {4, 34, 53, 78, 92}  # w tych rekordach keyboardPwd może zawierać prawdziwy PIN
 
 
 def now_ms():
@@ -90,9 +92,23 @@ def call(path, params, method="GET"):
             data=data.encode(),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        tresc = e.read()[:200].decode("utf-8", errors="replace")
+        sys.exit(f"Błąd HTTP {e.code} z {path}: {tresc}")
+    except urllib.error.URLError as e:
+        sys.exit(f"Nie można połączyć się z {API}: {e.reason} – sprawdź internet.")
+    except TimeoutError:
+        sys.exit(f"Brak odpowiedzi z {API} (limit czasu) – sprawdź internet.")
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError:
+        sys.exit(f"API zwróciło odpowiedź, która nie jest JSON, dla {path}: {raw[:200]}")
     if isinstance(body, dict) and body.get("errcode", 0) not in (0, None):
+        if body.get("errcode") == 10004:
+            sys.exit("Token wygasł (błąd 10004). Uruchom skrypt ponownie – zaloguje się od nowa.")
         sys.exit(f"Błąd API {path}: {body.get('errcode')} {body.get('errmsg')}")
     return body
 
@@ -143,9 +159,10 @@ def cmd_records(args):
         if not locks:
             print("Brak zamków, w których to konto jest głównym administratorem.")
         for lock in locks:
-            print(f"lockId={lock['lockId']:<10} nazwa={lock.get('lockAlias')!r:<30} "
-                  f"bramka={'tak' if lock.get('hasGateway') else 'NIE'}")
-        print("\nUruchom ponownie z lockId, aby zobaczyć odciski, karty, kody i rekordy.")
+            print(f"lockId={lock['lockId']:<10} lockMac={lock.get('lockMac')!s:<18} "
+                  f"nazwa={lock.get('lockAlias')!r:<30} bramka={'tak' if lock.get('hasGateway') else 'NIE'}")
+        print("\nWpisz lockId i lockMac w węźle ⚙ KONFIGURACJA w Node-RED.")
+        print("Uruchom ponownie z lockId, aby zobaczyć odciski, karty, kody i rekordy.")
         return
 
     lock = {"lockId": args.lock_id}

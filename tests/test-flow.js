@@ -225,6 +225,96 @@ test('pamięć duplikatów jest ograniczona', async () => {
     oczekuj(s.flowCtx.get('widziane').length === 500, 'pamięć: ' + s.flowCtx.get('widziane').length);
 });
 
+// ---------------- WERSJA 2.1 ----------------
+const MAC = "lockMac: '',";
+test('2.1 tryb nauki: bez lockId callback z chmury NIE wysyła KNX', async () => {
+    const s = srodowisko(); await wczytajConfig(s);
+    const w = await uruchom(PARSE, s, callback([rekord()], { lockMac: 'C5:40:E0:9C:8C:C1' }));
+    oczekuj(w[0].payload === 'success' && w[3].length === 0 && w[1].length === 0, 'wysłano w trybie nauki');
+    oczekuj(/TRYB NAUKI/.test(tekstLogu(w)) && /1234567/.test(tekstLogu(w)) && /C5:40:E0:9C:8C:C1/.test(tekstLogu(w)), 'log bez lockId/lockMac');
+});
+test('2.1 tryb nauki: przyciski TEST (bez msg.res) nadal działają', async () => {
+    const s = srodowisko(); await wczytajConfig(s);
+    const w = await uruchom(PARSE, s, { payload: callback([rekord()]).payload });
+    oczekuj(w[3].length === 1, 'test nie działa w trybie nauki');
+});
+test('2.1 lockMac zgodny (inny zapis) → działa', async () => {
+    const s = await przygotuj({ [MAC]: "lockMac: 'c5-40-e0-9c-8c-c1'," });
+    const w = await uruchom(PARSE, s, callback([rekord()], { lockMac: 'C5:40:E0:9C:8C:C1' }));
+    oczekuj(w[3].length === 1, 'zgodny MAC odrzucony');
+});
+test('2.1 lockMac niezgodny → ignorowany', async () => {
+    const s = await przygotuj({ [MAC]: "lockMac: 'C5:40:E0:9C:8C:C1'," });
+    const w = await uruchom(PARSE, s, callback([rekord()], { lockMac: 'AA:BB:CC:DD:EE:FF' }));
+    oczekuj(w[0].payload === 'success' && !w[3] && /Niezgodny lockMac/.test(w[4].payload), 'obcy MAC przeszedł');
+});
+test('2.1 lockMac ustawiony, brak w callbacku → ignorowany', async () => {
+    const s = await przygotuj({ [MAC]: "lockMac: 'C5:40:E0:9C:8C:C1'," });
+    const w = await uruchom(PARSE, s, callback([rekord()]));
+    oczekuj(!w[3] && /Niezgodny lockMac/.test(w[4].payload), 'brak MAC przeszedł');
+});
+test('2.1 błędny lockMac w konfiguracji jest odrzucany', async () => {
+    const s = srodowisko(); await wczytajConfig(s, { [MAC]: "lockMac: 'C5:40:E0'," });
+    oczekuj(!s.flowCtx.get('config'), 'zaakceptowano krótki MAC');
+});
+test('2.1 przycisk TEST przechodzi kontrolę lockMac', async () => {
+    const s = await przygotuj({ [MAC]: "lockMac: 'C5:40:E0:9C:8C:C1'," });
+    const sim = await uruchom('ttknx_fn_sim00001', s, { topic: 'palec' });
+    const w = await uruchom(PARSE, s, sim);
+    oczekuj(w[3].length === 1, 'symulacja odrzucona przez MAC');
+});
+test('2.1 czas ponad 1 h w przyszłości → pominięty', async () => {
+    const s = await przygotuj();
+    const w = await uruchom(PARSE, s, callback([rekord({ lockDate: teraz() + 3 * 3600e3, serverDate: teraz() + 3 * 3600e3 })]));
+    oczekuj(w[3].length === 0 && /w przyszłości/.test(tekstLogu(w)), 'przyszły rekord przeszedł');
+});
+test('2.1 czas 10 min w przyszłości → działa z ostrzeżeniem o zegarze', async () => {
+    const s = await przygotuj();
+    const w = await uruchom(PARSE, s, callback([rekord({ lockDate: teraz() + 600e3, serverDate: teraz() + 600e3 })]));
+    oczekuj(w[3].length === 1 && /zegar komputera/.test(tekstLogu(w)), 'brak działania lub ostrzeżenia');
+});
+test('2.1 typy 77–83 (podwójna autoryzacja) odrzucane w konfiguracji', async () => {
+    for (const t of [77, 80, 83]) {
+        const s = srodowisko(); await wczytajConfig(s, { 'typyPrzyjscia: [8, 4, 7, 55]': `typyPrzyjscia: [8, ${t}]` });
+        oczekuj(!s.flowCtx.get('config'), 'zaakceptowano typ ' + t);
+    }
+});
+test('2.1 nieudane i alarmowe typy odrzucane w konfiguracji', async () => {
+    for (const t of [50, 51, 58, 64, 65, 66, 68, 71, 88]) {
+        const s = srodowisko(); await wczytajConfig(s, { 'typyPrzyjscia: [8, 4, 7, 55]': `typyPrzyjscia: [${t}]` });
+        oczekuj(!s.flowCtx.get('config'), 'zaakceptowano typ ' + t);
+    }
+});
+test('2.1 dozwolone typy (twarz, żyły dłoni, QR, karta hotelowa) akceptowane', async () => {
+    const s = srodowisko(); await wczytajConfig(s, { 'typyPrzyjscia: [8, 4, 7, 55]': 'typyPrzyjscia: [8, 49, 57, 67, 84, 85]' });
+    oczekuj(s.flowCtx.get('config'), 'odrzucono dozwolone typy');
+});
+test('2.1 rekord podwójnej autoryzacji (79) nie uruchamia automatyki', async () => {
+    const s = await przygotuj();
+    const w = await uruchom(PARSE, s, callback([rekord({ recordType: 79 })]));
+    oczekuj(w[3].length === 0 && /czeka na 2\. osobę/.test(tekstLogu(w)), 'uruchomiono');
+});
+test('2.1 PIN maskowany także w typach 53 i 78', async () => {
+    const s = await przygotuj();
+    for (const t of [53, 78]) {
+        const w = await uruchom(PARSE, s, callback([rekord({ recordType: t, keyboardPwd: '987654', lockDate: teraz() - t })]));
+        oczekuj(!JSON.stringify(w[4]).includes('987654'), 'PIN widoczny w typie ' + t);
+    }
+});
+test('2.1 recordTypeFromLock jest w logu', async () => {
+    const s = await przygotuj();
+    const w = await uruchom(PARSE, s, callback([rekord({ recordTypeFromLock: 20 })]));
+    oczekuj(/\(zamek: 20\)/.test(tekstLogu(w)), 'brak recordTypeFromLock');
+});
+test('2.1 wszystkie 61 typów z dokumentacji mają opis', async () => {
+    const m = kod(PARSE).match(/const TYPY = \{([\s\S]*?)\};/)[1];
+    const klucze = [...m.matchAll(/(\d+):/g)].map(x => +x[1]);
+    const oficjalne = [1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 29, 30, 31, 32, 33, 34, 35, 36, 37, 42, 43, 44, 45, 46, 47, 48, 49,
+        50, 51, 52, 53, 54, 55, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 71, 75, 76, 77, 78, 79, 80, 81, 82, 83,
+        84, 85, 86, 88, 92];
+    oczekuj(oficjalne.length === 61 && oficjalne.every(t => klucze.includes(t)) && klucze.length === 61, 'brakujące typy');
+});
+
 // ---------------- SERWIS ----------------
 function atrapaHttps(odpowiedzi, dataSerwera) {
     const wywolania = [];
