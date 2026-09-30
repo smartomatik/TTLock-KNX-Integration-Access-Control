@@ -9,7 +9,7 @@ Identyfikatory węzłów są stałe, więc ponowny import zastępuje istniejący
 import json
 import pathlib
 
-WERSJA = "2.1.1"
+WERSJA = "2.1.2"
 KATALOG = pathlib.Path(__file__).resolve().parent
 src = lambda nazwa: (KATALOG / "src" / nazwa).read_text(encoding="utf-8")
 

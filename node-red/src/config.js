@@ -51,7 +51,7 @@ const config = {
 // =====================================================================
 function bezOgonkow(t) {
     return String(t).replace(/ł/g, 'l').replace(/Ł/g, 'L')
-        .normalize('NFD').replace(/[̀-ͯ]/g, '');
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // usuwa znaki diakrytyczne po NFD
 }
 function tekstKnx(t) {
     // DPT 16.001 = ISO 8859-1, maks. 14 znaków

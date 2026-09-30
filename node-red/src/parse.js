@@ -34,10 +34,7 @@ const PRZYSZLOSC_MAKS_MS = 60 * 60000;     // ponad 1 h w przyszłości: rekord 
 
 function bezOgonkow(t) {
     return String(t).replace(/ł/g, 'l').replace(/Ł/g, 'L')
-        .normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
-function tekstKnx(t) {
-    return bezOgonkow(t).replace(/[^\x20-\x7E\xA0-\xFF]/g, '').trim().substring(0, 14);
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // usuwa znaki diakrytyczne po NFD
 }
 function klucz(nazwa) {
     return bezOgonkow(String(nazwa).trim().split(/[\s\-_–—.,;:/]+/)[0] || '').toLowerCase();
@@ -97,6 +94,7 @@ function przetworz() {
     const widziane = flow.get('widziane') || [];
     const teraz = Date.now();
     const sceny = [], teksty = [], wyzwalacze = [];
+    let ostatni = null;   // do statusu węzła
     // Tryb nauki: bez lockId zdarzenia z chmury tylko logujemy (przyciski TEST nie mają msg.res).
     const trybNauki = !cfg.lockId && !!msg.res;
     const uwagaLock = cfg.lockId ? ''
@@ -130,7 +128,7 @@ function przetworz() {
             decyzja = `OSOBA ${miejsce} (7/3/${miejsce})` + (osoba.scena ? `, SCENA ${osoba.scena}` : '');
             if (osoba.scena) sceny.push({ payload: { save_recall: 0, scenenumber: osoba.scena }, osoba: osoba.nazwa });
             wyzwalacze.push({ payload: true, miejsce, osoba: osoba.nazwa });
-            teksty.push({ payload: tekstKnx(osoba.nazwa) });
+            teksty.push({ payload: osoba.nazwa });   // oczyszczona do DPT 16 w KONFIGURACJI
         }
         if (Number.isFinite(czasSerwera) && czasSerwera > 0) widziane.push(id);
         if (wiek < -ZEGAR_TOLERANCJA_MS && wiek >= -PRZYSZLOSC_MAKS_MS) decyzja += ' | UWAGA: zegar komputera spóźnia się – sprawdź NTP';
@@ -140,6 +138,7 @@ function przetworz() {
         const czas = Number.isFinite(czasZamka) && czasZamka > 0
             ? new Date(czasZamka).toLocaleString('pl-PL') : '(brak czasu)';
         const opoznienie = Number.isFinite(wiek) ? `${(wiek / 1000).toFixed(1)} s` : '?';
+        ostatni = { nazwa, decyzja };
         logi.push({
             payload: `${czas} | ${TYPY[typ] || 'typ ' + typ}${zZamka} | "${nazwa}" | ${decyzja} | opóźnienie ${opoznienie}${uwagaLock}`,
             rekord: maskuj(r),
@@ -148,10 +147,9 @@ function przetworz() {
     flow.set('widziane', widziane.slice(-PAMIEC_DUPLIKATOW));
     if (rekordy.length) flow.set('ostatniCallback', teraz);
 
-    const ostatni = logi.length ? logi[logi.length - 1].payload.split(' | ') : null;
-    if (ostatni && ostatni.length > 3) {
+    if (ostatni) {
         node.status({ fill: wyzwalacze.length ? 'green' : 'grey', shape: 'dot',
-            text: `${ostatni[2]}: ${ostatni[3]}`.substring(0, 60) });
+            text: `"${ostatni.nazwa}": ${ostatni.decyzja}`.substring(0, 60) });
     }
     return [odpowiedz, sceny, teksty, wyzwalacze, logi];
 }

@@ -4,7 +4,7 @@ Uruchamianie **automatyki KNX zależnej od osoby**, która otworzyła drzwi czyt
 Anna otwiera odciskiem palca → na KNX idzie jej wyzwalacz 7/3/1 i scena 1 (światła, rolety, ogrzewanie, muzyka). Piotr otwiera kodem PIN → wyzwalacz 7/3/2 i scena 2.
 
 Rozwiązanie działa w **Node-RED** z gotowymi węzłami i nie wymaga Home Assistant ani programowania.
-Instalator edytuje jedną tabelę „osoba → scena” w przeglądarce.
+Instalator edytuje w przeglądarce jedną listę: osoba → wyzwalacz KNX i scena.
 
 ```
 Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Chmura TTLock EU
@@ -38,7 +38,7 @@ Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Ch
 | [docs/TEST-API.md](docs/TEST-API.md) | Jak sprawdzić, czy API zwraca osobę, zanim cokolwiek zainstalujesz |
 | [docs/UTRZYMANIE.md](docs/UTRZYMANIE.md) | Plan pracy na 5 lat: co działa automatycznie, ryzyka, aktualizacje, kopie zapasowe, coroczny przegląd |
 | [node-red/src/](node-red/src/) i [node-red/build-flow.py](node-red/build-flow.py) | Kod źródłowy węzłów i generator flow (dla osób zmieniających kod) |
-| [tests/](tests/) | 60 testów logiki flow (`node tests/test-flow.js`) i 13 testów skryptu (`python3 tests/test_ttlock_test.py`), bez instalacji i bez sieci |
+| [tests/](tests/) | 63 testy logiki flow (`node tests/test-flow.js`) i 13 testów skryptu (`python3 tests/test_ttlock_test.py`), bez instalacji i bez sieci |
 | [docs/RAPORT.md](docs/RAPORT.md) | Raport wykonalności: dane z zamka, ograniczenia, porównanie rozwiązań KNX, bezpieczeństwo, RODO |
 
 ## Wymagania w skrócie
@@ -66,7 +66,7 @@ Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Ch
 - **Odporność na błędy:** każdy callback dostaje odpowiedź `success`. Uszkodzone dane są logowane i pomijane, a błędna konfiguracja nie zastępuje poprawnej.
 - **Bezpieczeństwo danych:** kody PIN są maskowane, a hasła przechowywane zaszyfrowane (credential).
 - **Ochrona przed fałszywymi zdarzeniami:** callback TTLock nie ma podpisu. Działają tylko zdarzenia z właściwym lockId i lockMac, a bez lockId działa tryb nauki (tylko log).
-- **Testy:** 60 testów flow i 13 testów skryptu. Uruchom je po każdej zmianie kodu:
+- **Testy:** 63 testy flow i 13 testów skryptu. Uruchom je po każdej zmianie kodu:
   ```bash
   node tests/test-flow.js
   ```

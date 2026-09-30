@@ -332,6 +332,24 @@ test('2.1 wszystkie 61 typów z dokumentacji mają opis', async () => {
     oczekuj(oficjalne.length === 61 && oficjalne.every(t => klucze.includes(t)) && klucze.length === 61, 'brakujące typy');
 });
 
+// ---------------- PORZĄDKI ----------------
+test('status węzła poprawny także gdy nazwa zawiera " | "', async () => {
+    const s = await przygotuj();
+    await uruchom(PARSE, s, callback([rekord({ username: 'Anna | kciuk' })]));
+    const st = s.statusy.pop();
+    oczekuj(st && st.fill === 'green' && /"Anna \| kciuk": OSOBA 1/.test(st.text), 'status: ' + (st && st.text));
+});
+test('tekst na KNX pochodzi z oczyszczonej nazwy w KONFIGURACJI', async () => {
+    const s = await przygotuj({ "nazwa: 'Anna',   scena: 1": "nazwa: 'Żaneta Świętokrzyska 😀', scena: 1" });
+    const w = await uruchom(PARSE, s, callback([rekord()]));
+    oczekuj(w[2][0].payload === 'Zaneta Swietok', 'tekst: ' + w[2][0].payload);
+});
+test('kod źródłowy nie zawiera niewidocznych znaków łączących', async () => {
+    for (const n of flowJson.filter(n => n.type === 'function')) {
+        oczekuj(!/[̀-ͯ]/.test(n.func), 'niewidoczne znaki w ' + n.name);
+    }
+});
+
 // ---------------- SERWIS ----------------
 function atrapaHttps(odpowiedzi, dataSerwera) {
     const wywolania = [];

@@ -29,9 +29,13 @@ function zapytanie(metoda, sciezka, parametry) {
             'Content-Length': Buffer.byteLength(dane),
         };
         const req = https.request(url, { method: metoda, timeout: 20000, headers: naglowki }, res => {
-            let tekst = '';
+            let tekst = '', przerwane = false;
             res.setEncoding('utf8');
-            res.on('data', c => { tekst += c; if (tekst.length > 1e6) req.destroy(new Error('odpowiedź za duża')); });
+            res.on('data', c => {
+                if (przerwane) return;
+                tekst += c;
+                if (tekst.length > 1e6) { przerwane = true; req.destroy(new Error('odpowiedź za duża')); }
+            });
             res.on('end', () => {
                 let json = null;
                 try { json = JSON.parse(tekst); } catch (e) { /* obsłużone niżej */ }
