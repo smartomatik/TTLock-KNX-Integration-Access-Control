@@ -8,7 +8,7 @@ Czas pracy to około 2–3 godziny, nie licząc oczekiwania na zatwierdzenie kon
 |---|---|
 | A. Przygotowanie (biuro) | 1 Konto deweloperskie · 2 Nazwy w aplikacji · 3 Test API |
 | B. ETS | 4 Adresy grup i sceny |
-| C. Node-RED (obiekt) | 5 Instalacja · 6 Hasło · 7 knx-ultimate · 8 Import flow · 9 Interfejs KNX · 10 Konfiguracja osób · 11 Test lokalny |
+| C. Node-RED (obiekt) | 5 Instalacja (Raspberry Pi / Docker / Home Assistant) · 6 Hasło · 7 knx-ultimate · 8 Import flow · 9 Interfejs KNX · 10 Konfiguracja osób · 11 Test lokalny |
 | D. Połączenie z chmurą | 12 Sekretny adres · 13 Publiczny adres HTTPS (Cloudflare / Tailscale / przekierowanie portów) · 14 Callback URL w TTLock · 15 Test z drzwi |
 | E. Przekazanie | 16 Obsługa na co dzień · 17 Rozwiązywanie problemów |
 
@@ -130,6 +130,65 @@ docker compose up -d node-red
 Kontener działa w sieci hosta (`network_mode: host`), bo KNX IP (UDP) działa tak najpewniej.
 
 Edytor otworzysz pod adresem **http://IP-komputera:1880**.
+
+**Opcja C – Home Assistant (aplikacja / dodatek Node-RED)**
+Wybierz tę opcję, jeśli klient ma już Home Assistant OS lub Supervised. Flow jest taki sam i nie wymaga zmian w kodzie. Różnice opisuje sekcja [Wariant: Node-RED w Home Assistant](#wariant-node-red-w-home-assistant) poniżej. Przeczytaj ją przed krokiem 6.
+
+#### Wariant: Node-RED w Home Assistant
+
+**Instalacja**
+1. **Ustawienia → Aplikacje** (w starszych wersjach: *Dodatki*) → **Sklep** → wyszukaj **Node-RED** (Home Assistant Community Apps) → **Zainstaluj**.
+2. Zakładka **Konfiguracja** aplikacji:
+   - **`ssl: false`**. Domyślnie jest `true`, a bez plików `fullchain.pem` i `privkey.pem` w folderze `/ssl/` aplikacja się nie uruchomi. Szyfrowanie z internetu i tak zapewnia tunel lub proxy z kroku 13.
+   - **`credential_secret`**: wpisz długie hasło i **nigdy go nie zmieniaj**, bo zapisane dane logowania (np. hasło keyringu KNX) przestaną działać.
+   - **`http_node`**: zostaw **puste** (username i password). TTLock nie potrafi się logować, a callback chroni sekret w adresie.
+   - **`npm_packages`**: dodaj `node-red-contrib-knx-ultimate`. Możesz też pominąć to i zrobić krok 7 przez paletę.
+   - Sekcja **Sieć**: port **1880** musi być ustawiony (bezpośredni dostęp). Bez niego callback z zewnątrz nie dotrze do Node-RED.
+3. Zapisz, uruchom aplikację, sprawdź **Dziennik** i włącz **Pokaż na pasku bocznym**.
+
+**Różnice w dalszych krokach**
+
+| Krok | Co inaczej w Home Assistant |
+|---|---|
+| 6 Hasło | **Pomiń.** Edytor jest chroniony logowaniem Home Assistant. |
+| 7 knx-ultimate | Bez zmian, chyba że dodałeś pakiet w `npm_packages`. |
+| 8 Import flow | Bez zmian. Edytor otwierasz z paska bocznego HA. |
+| 9 Interfejs KNX | Bez zmian, bo aplikacja działa w sieci hosta. Plik keyringu wczytaj w oknie węzła gateway. Jeśli Home Assistant ma też własną integrację KNX, interfejs KNX IP potrzebuje **dwóch wolnych tuneli** (jeden dla HA, jeden dla Node-RED). |
+| 12 Sekretny adres | Ścieżka w węźle zostaje `/ttlock/<twój-sekret>`, ale aplikacja dodaje przed nią **`/endpoint`**. Pełny adres w sieci lokalnej: `http://<IP-HA>:1880/endpoint/ttlock/<twój-sekret>` |
+| 13 Publiczny adres | Patrz tabela poniżej. **Nabu Casa nie zadziała**, bo przekazuje tylko webhooki samego Home Assistant, a nie ścieżki Node-RED. |
+| 14 Callback URL | Adres zawiera `/endpoint`, np. `https://drzwi.twojadomena.pl/endpoint/ttlock/<twój-sekret>` |
+
+**Test lokalny adresu** (z dowolnego komputera w sieci obiektu). Odpowiedź musi brzmieć `success`:
+```bash
+curl -X POST http://<IP-HA>:1880/endpoint/ttlock/<twój-sekret> -d "lockId=1&notifyType=1&records=[]"
+```
+
+**Publiczny adres (krok 13) przy Home Assistant**
+
+| Instalacja HA | Zalecany wariant | Ustawienia |
+|---|---|---|
+| **Home Assistant OS** (np. HA Green/Yellow, Raspberry Pi z HA OS) | **13A Cloudflare Tunnel przez aplikację Cloudflared** | Opis poniżej |
+| Home Assistant OS | 13B / 13C | Nie da się ich zainstalować obok HA OS w zwykły sposób. Aplikacja Tailscale w HA udostępnia przez Funnel tylko interfejs HA, a nie Node-RED. Możliwe tylko z **innego komputera z Linuxem** w sieci: Tailscale `--set-path=/endpoint/ttlock http://<IP-HA>:1880/endpoint/ttlock` albo Caddy `handle /endpoint/ttlock/* { reverse_proxy <IP-HA>:1880 }` |
+| **Home Assistant Supervised** (Debian) | 13A, 13B lub 13C na tym samym komputerze | Jak w kroku 13, ale z prefiksem `/endpoint`, np. Tailscale `--set-path=/endpoint/ttlock http://127.0.0.1:1880/endpoint/ttlock`, Caddy `handle /endpoint/ttlock/*` |
+
+**13A w Home Assistant OS – aplikacja Cloudflared**
+1. W panelu Cloudflare utwórz tunel (krok 13A, pkt 1) i skopiuj **token** tunelu.
+2. W Home Assistant dodaj repozytorium aplikacji Cloudflared: **Ustawienia → Aplikacje → Sklep → ⋮ → Repozytoria** → `https://github.com/homeassistant-apps/app-cloudflared`. Zainstaluj aplikację **Cloudflared**.
+3. W konfiguracji aplikacji wpisz token w opcji **`tunnel_token`** i uruchom ją. Z tokenem aplikacja ignoruje pozostałe opcje, a trasy ustawiasz tylko w panelu Cloudflare.
+4. W panelu Cloudflare dodaj **Public hostname**:
+   - **Path:** `^/endpoint/ttlock/.*`
+   - **Service:** `HTTP` → `<IP-HA>:1880`
+
+   Nie dodawaj reguły dla całego Home Assistant, chyba że klient tego chce.
+5. Test z zewnątrz (dane komórkowe):
+   - `https://drzwi.twojadomena.pl/` → **404** ✔
+   - callback:
+     ```bash
+     curl -X POST https://drzwi.twojadomena.pl/endpoint/ttlock/<twój-sekret> -d "lockId=1&notifyType=1&records=[]"
+     ```
+     Odpowiedź: `success` ✔
+
+Twój adres callbacku: `https://drzwi.twojadomena.pl/endpoint/ttlock/<twój-sekret>`
 
 ### Krok 6 – Hasło do edytora (obowiązkowo)
 1. Wygeneruj skrót hasła:
@@ -414,6 +473,8 @@ Na koniec wpisz **lockId** w KONFIGURACJI (jeśli jeszcze go nie ma) i kliknij *
 |---|---|
 | Nic nie przychodzi w Debug po otwarciu drzwi | Sprawdź po kolei: bramka online w aplikacji? Rekord widoczny w aplikacji? Callback URL zapisany w euopen? Administrator zalogowany Twoim clientId (krok 3)? Czy inna integracja nie przejęła callbacków? |
 | `curl` na adres zwraca 404 | Ścieżka w węźle „Callback TTLock” różni się od adresu. Albo błędna reguła: Path w Cloudflare (13A), cel `--set-path` w Tailscale (13B, patrz wariant zapasowy) lub blok `handle` w Caddyfile (13C). |
+| Home Assistant: adres zwraca stronę logowania HA, 401 albo nie odpowiada | Brak prefiksu `/endpoint` w adresie albo nieustawiony port 1880 w sekcji Sieć aplikacji Node-RED. |
+| Home Assistant: aplikacja Node-RED nie startuje | `ssl: true` bez plików certyfikatu w `/ssl/`. Ustaw `ssl: false`. |
 | Tailscale: adres przestał działać po kilku miesiącach | Wygasł klucz urządzenia. Zaloguj ponownie (`sudo tailscale up`) i wyłącz wygasanie klucza (13B, pkt 6). |
 | Przekierowanie portów: brak certyfikatu lub przekroczony czas połączenia | Port 80/443 nie jest przekierowany, DDNS wskazuje stary adres albo łącze jest za CGNAT (13C, pkt 1). |
 | `nieznana osoba "xyz"` | Dodaj klucz `xyz` w KONFIGURACJI albo popraw nazwę w aplikacji. |

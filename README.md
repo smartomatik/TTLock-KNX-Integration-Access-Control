@@ -42,7 +42,7 @@ Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Ch
 - Czytnik UL podłączony do **bramki** (bez bramki chmura nie dostaje rekordów w czasie rzeczywistym)
 - Konto **administratora** zamka w aplikacji SX
 - Konto deweloperskie **TTLock Open Platform** (euopen.ttlock.com, darmowe, zatwierdzane ręcznie w kilka dni roboczych)
-- Komputer pracujący 24/7 w sieci obiektu: Raspberry Pi, NAS z Dockerem lub mini PC
+- Komputer pracujący 24/7 w sieci obiektu: Raspberry Pi, NAS z Dockerem, mini PC albo **istniejący Home Assistant** (aplikacja Node-RED, bez zmian w flow)
 - Interfejs **KNX IP** z tunelowaniem, najlepiej z KNX IP Secure (np. MDT SCN-IP100.03)
 - Publiczny adres HTTPS dla callbacku, do wyboru:
   - **Cloudflare Tunnel** (darmowe konto i domena),
