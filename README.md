@@ -38,7 +38,7 @@ Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Ch
 | [docs/TEST-API.md](docs/TEST-API.md) | Jak sprawdzić, czy API zwraca osobę, zanim cokolwiek zainstalujesz |
 | [docs/UTRZYMANIE.md](docs/UTRZYMANIE.md) | Plan pracy na 5 lat: co działa automatycznie, ryzyka, aktualizacje, kopie zapasowe, coroczny przegląd |
 | [node-red/src/](node-red/src/) i [node-red/build-flow.py](node-red/build-flow.py) | Kod źródłowy węzłów i generator flow (dla osób zmieniających kod) |
-| [tests/test-flow.js](tests/test-flow.js) | 41 testów automatycznych logiki flow: `node tests/test-flow.js` (bez instalacji) |
+| [tests/](tests/) | 57 testów logiki flow (`node tests/test-flow.js`) i 13 testów skryptu (`python3 tests/test_ttlock_test.py`), bez instalacji i bez sieci |
 | [docs/RAPORT.md](docs/RAPORT.md) | Raport wykonalności: dane z zamka, ograniczenia, porównanie rozwiązań KNX, bezpieczeństwo, RODO |
 
 ## Wymagania w skrócie
@@ -60,14 +60,18 @@ Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Ch
 - Tożsamość przychodzi przez chmurę TTLock. Bez internetu drzwi działają normalnie, ale scena się nie uruchomi.
 - Opóźnienie od otwarcia do sceny zmierz na obiekcie. TTLock nie podaje wartości, oczekuj kilku sekund.
 
-## Niezawodność (wersja 2.0)
+## Niezawodność (wersja 2.1)
 
 - **Samokontrola co 6 h:** odświeżenie tokenu TTLock, kontrola bramki i zegara. Wynik trafia na KNX (7/4/1), więc awaria jest widoczna na wizualizacji.
 - **Odporność na błędy:** każdy callback dostaje odpowiedź `success`. Uszkodzone dane są logowane i pomijane, a błędna konfiguracja nie zastępuje poprawnej.
 - **Bezpieczeństwo danych:** kody PIN są maskowane, a hasła przechowywane zaszyfrowane (credential).
-- **Testy:** 41 testów automatycznych. Uruchom je po każdej zmianie kodu:
+- **Ochrona przed fałszywymi zdarzeniami:** callback TTLock nie ma podpisu. Działają tylko zdarzenia z właściwym lockId i lockMac, a bez lockId działa tryb nauki (tylko log).
+- **Testy:** 57 testów flow i 13 testów skryptu. Uruchom je po każdej zmianie kodu:
   ```bash
   node tests/test-flow.js
+  ```
+  ```bash
+  python3 tests/test_ttlock_test.py
   ```
 
 ## Zmiana kodu
@@ -78,5 +82,8 @@ python3 node-red/build-flow.py
 ```
 ```bash
 node tests/test-flow.js
+```
+```bash
+python3 tests/test_ttlock_test.py
 ```
 Następnie zaimportuj nowy `node-red/flow-ttlock-knx.json`. Węzły mają stałe identyfikatory, więc import zastępuje poprzednią wersję.

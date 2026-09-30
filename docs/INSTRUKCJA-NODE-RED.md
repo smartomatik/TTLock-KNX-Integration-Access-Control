@@ -50,6 +50,8 @@ Scena jest wybierana po **pierwszym słowie** nazwy, więc nazwy muszą zaczyna�
 Wielkość liter i polskie znaki nie mają znaczenia: `Łukasz` zostanie dopasowany do klucza `lukasz`.
 Kod PIN wspólny dla kilku osób identyfikuje kod, a nie osobę. Każda osoba powinna mieć własny kod.
 
+**Nie nazywaj kodu PIN samym kodem** (np. `1234`). Numer PIN jest w logach maskowany, ale **nazwa** trafia do logu i na KNX bez zmian.
+
 ### Krok 3 – Test API i odczyt lockId
 Instrukcja jest w [TEST-API.md](TEST-API.md). W skrócie:
 ```bash
@@ -58,7 +60,7 @@ python3 tools/ttlock_test.py records
 ```bash
 python3 tools/ttlock_test.py records <lockId>
 ```
-Otwórz drzwi odciskiem, uruchom drugie polecenie i sprawdź, czy przy rekordzie widać nazwę, np. `'Anna - kciuk'`. Zapisz **lockId**.
+Otwórz drzwi odciskiem, uruchom drugie polecenie i sprawdź, czy przy rekordzie widać nazwę, np. `'Anna - kciuk'`. Zapisz **lockId** i **lockMac**. Pierwsze polecenie pokazuje oba.
 
 > ⚠️ Logowanie kontem administratora powoduje, że **callbacki tego zamka trafiają do Twojej aplikacji deweloperskiej**. Jeśli klient ma już inną integrację TTLock (np. Home Assistant), może ona przestać otrzymywać zdarzenia.
 
@@ -251,9 +253,10 @@ Ponowny import nowszej wersji flow **zastępuje** istniejącą zakładkę, bo w�
 ### Krok 10 – Konfiguracja osób
 Kliknij dwukrotnie węzeł **⚙ KONFIGURACJA** i zmień tylko sekcję `config`:
 ```js
-lockId: '1234567',            // z kroku 3; puste '' = każdy zamek (tylko do testów)
+lockId: '1234567',            // z kroku 3; puste '' = TRYB NAUKI (zdarzenia z chmury tylko w logu)
+lockMac: 'C5:40:E0:9C:8C:C1', // z kroku 3; drugie zabezpieczenie; puste '' = bez sprawdzania
 maksWiekMinut: 5,             // starsze rekordy nie uruchomią automatyki
-typyPrzyjscia: [8, 4, 7, 55], // odcisk, PIN, karta, pilot
+typyPrzyjscia: [8, 4, 7, 55], // odcisk, PIN, karta, pilot (dozwolone też 1, 9, 12, 49, 57, 67, 75, 76, 84, 85, 92)
 osoby: [
     /*  1 → 7/3/1  */ { klucz: 'anna',   nazwa: 'Anna',     scena: 1 },
     /*  2 → 7/3/2  */ { klucz: 'piotr',  nazwa: 'Piotr',    scena: 2 },
@@ -262,6 +265,9 @@ osoby: [
     // … aż do miejsca 10
 ],
 ```
+- **lockId puste = tryb nauki.** Zdarzenia z chmury są tylko zapisywane w logu razem z lockId i lockMac do skopiowania. KNX nic nie dostaje. Przyciski TEST działają zawsze.
+- **lockMac:** callback TTLock nie ma podpisu, więc jego fałszywą wersję może wysłać każdy, kto zna adres. Sprawdzenie lockId i lockMac (oraz sekret w adresie) sprawia, że działają tylko zdarzenia Twojego czytnika. Wielkość liter i separatory nie mają znaczenia.
+- **typyPrzyjscia** przyjmuje tylko udane otwarcia. Konfiguracja odrzuci np. 32 (od środka), nieudane próby, alarmy i **77–83 (podwójna autoryzacja: pierwsza osoba zweryfikowana, drzwi nadal zamknięte)**.
 - **Miejsce** (1–10) to kolejność na liście. Decyduje, który wyzwalacz 7/3/n dostanie `1`.
 - **klucz** to pierwsze słowo nazwy z aplikacji, małymi literami, bez polskich znaków. Pusty `''` oznacza wolne miejsce.
 - **nazwa** to tekst na KNX, maks. 14 znaków. Polskie znaki są zamieniane automatycznie, bo DPT 16.001 ich nie obsługuje.
@@ -488,7 +494,7 @@ Zapisz:
 - czy otwarcie z aplikacji (typ 1) w ogóle przychodzi. Jeśli tak i ma uruchamiać scenę, dodaj `1` do `typyPrzyjscia`.
 - czy przy karcie i kodzie pojawia się nazwa.
 
-Na koniec wpisz **lockId** w KONFIGURACJI (jeśli jeszcze go nie ma) i kliknij **Deploy**.
+Jeśli **lockId** jest jeszcze puste (tryb nauki), log pokaże przy każdym zdarzeniu: `TRYB NAUKI: wpisz lockId '…' i lockMac '…' w KONFIGURACJI`. Skopiuj obie wartości do ⚙ KONFIGURACJA i kliknij **Deploy**. Dopiero wtedy zdarzenia z drzwi uruchamiają KNX.
 
 ---
 
@@ -523,6 +529,9 @@ Na koniec wpisz **lockId** w KONFIGURACJI (jeśli jeszcze go nie ma) i kliknij *
 | Serwis: „żadna bramka nie widzi czytnika” | Bramka bez zasilania lub Wi-Fi, albo za daleko od czytnika. Sprawdź w aplikacji SX. |
 | Serwis: „zegar komputera różni się” | Brak synchronizacji czasu (NTP). Na Pi/Debian: `timedatectl` powinien pokazać „System clock synchronized: yes”. |
 | Węzeł Serwis TTLock: błąd modułu (`crypto`/`https`) | W `settings.js` ustawiono `functionExternalModules: false`. Zmień na `true` i zrestartuj Node-RED. |
+| Log: `TRYB NAUKI – KNX nie wysłany` | lockId nieustawiony. Wpisz lockId i lockMac z logu do ⚙ KONFIGURACJA (krok 10). |
+| Log: `Niezgodny lockMac` | lockMac w konfiguracji różni się od MAC czytnika. Popraw lub wyczyść `lockMac`. |
+| Log: `czas rekordu ponad 1 h w przyszłości` | Zegar serwera lub komputera jest bardzo rozjechany, albo zdarzenie jest fałszywe. Sprawdź NTP (`timedatectl`). |
 | Czerwony status ⚙ KONFIGURACJA | Błąd w konfiguracji (opis w statusie i w Debug). Działa poprzednia poprawna konfiguracja. |
 | Węzły KNX czerwone lub „disconnected” | Zły adres IP lub protokół interfejsu, brak wolnego tunelu, albo błąd keyringu przy Secure. |
 | Scena przychodzi, ale nic się nie dzieje | Obiekty scen aktorów nie są połączone z 7/1/0 albo numer sceny w aktorze jest inny. |
@@ -535,5 +544,5 @@ Na koniec wpisz **lockId** w KONFIGURACJI (jeśli jeszcze go nie ma) i kliknij *
 - **Tylko zamek → KNX.** Nie dodawaj do tego flow żadnej funkcji otwierającej drzwi.
 - **Nie rozbrajaj alarmu** na podstawie otwarcia. Co najwyżej wyślij powiadomienie. Dotyczy to też kodów przekazywanych dalej i otwarć siłowych.
 - Edytor Node-RED **tylko z hasłem** (krok 6) i **niedostępny z internetu** (tylko ścieżka `/ttlock/…` jest publiczna – krok 13).
-- **Sekret w adresie** traktuj jak hasło.
+- **Sekret w adresie** traktuj jak hasło. Callback TTLock nie ma podpisu ani tokenu, więc ochronę tworzą razem: sekret w adresie, **lockId** i **lockMac** (krok 10).
 - **RODO:** w domu prywatnym ma zastosowanie wyłączenie domowe. W wynajmie, biurze lub przy zatrudnionych osobach (sprzątanie, opieka) właściciel staje się administratorem danych: potrzebna jest informacja dla osób, ograniczony czas przechowywania i minimalizacja danych. Na KNX wysyłaj tylko imiona. Log Node-RED nie zawiera kodów PIN, bo są maskowane.

@@ -12,7 +12,7 @@ const s = scenariusze[msg.topic] || scenariusze.palec;
 msg.payload = {
     lockId: String(lockId),
     notifyType: '1',
-    lockMac: 'AA:BB:CC:DD:EE:FF',
+    lockMac: cfg.lockMac || 'AABBCCDDEEFF',
     records: JSON.stringify([Object.assign({
         lockId: Number(lockId), success: 1, lockDate: teraz - 2000,
         serverDate: teraz - 500, electricQuantity: 100,

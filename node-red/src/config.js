@@ -4,8 +4,14 @@
 // =====================================================================
 const config = {
     // ID zamka w chmurze TTLock (odczytasz go skryptem tools/ttlock_test.py).
-    // Puste '' = akceptuj każdy zamek – TYLKO na czas testów!
+    // Puste '' = TRYB NAUKI: zdarzenia z chmury są tylko logowane (z lockId i lockMac
+    // do skopiowania), NIE uruchamiają KNX. Przyciski TEST działają zawsze.
     lockId: '',
+
+    // Adres MAC czytnika (drugie zabezpieczenie – callback TTLock nie ma podpisu).
+    // Odczytasz go skryptem tools/ttlock_test.py albo z logu w trybie nauki.
+    // Puste '' = bez sprawdzania MAC. Format dowolny, np. 'C5:40:E0:9C:8C:C1'.
+    lockMac: '',
 
     // Rekord starszy niż tyle minut nie uruchomi automatyki
     // (np. bramka była offline i wysłała zaległe zdarzenia). Zakres 1–1440.
@@ -14,6 +20,10 @@ const config = {
     // Typy otwarcia, które uruchamiają automatykę:
     //  8 = odcisk palca, 4 = kod PIN, 7 = karta/brelok RFID, 55 = pilot
     //  1 = aplikacja (eKey), 12 = zdalnie przez bramkę – dodaj dopiero po teście
+    // Dozwolone także: 9 opaska, 49 karta hotelowa, 57 kod QR, 67 twarz,
+    //  75/76 otwarcie przez udzielenie z aplikacji/zdalnie, 84/85 żyły dłoni, 92 kod administratora.
+    // NIE dodawaj 77–83: to podwójna autoryzacja – pierwsza osoba zweryfikowana,
+    //  drzwi nadal ZAMKNIĘTE (czekają na drugą osobę). Konfiguracja je odrzuci.
     typyPrzyjscia: [8, 4, 7, 55],
 
     // 10 miejsc na osoby. Numer miejsca = adres wyzwalacza KNX 7/3/<nr>.
@@ -52,6 +62,9 @@ const bledy = [];
 const lockId = String(config.lockId === undefined || config.lockId === null ? '' : config.lockId).trim();
 if (lockId && !/^\d+$/.test(lockId)) bledy.push('lockId może zawierać tylko cyfry');
 
+const lockMac = String(config.lockMac || '').toUpperCase().replace(/[^0-9A-F]/g, '');
+if (lockMac && lockMac.length !== 12) bledy.push('lockMac musi mieć 12 znaków szesnastkowych, np. C5:40:E0:9C:8C:C1');
+
 const maksWiekMinut = Number(config.maksWiekMinut);
 if (!(Number.isFinite(maksWiekMinut) && maksWiekMinut >= 1 && maksWiekMinut <= 1440)) {
     bledy.push('maksWiekMinut musi być liczbą 1–1440');
@@ -61,8 +74,12 @@ const typyPrzyjscia = Array.isArray(config.typyPrzyjscia) ? config.typyPrzyjscia
 if (!typyPrzyjscia.length || typyPrzyjscia.some(t => !Number.isInteger(t) || t <= 0)) {
     bledy.push('typyPrzyjscia musi być listą numerów, np. [8, 4, 7, 55]');
 }
-if (typyPrzyjscia.some(t => [10, 29, 32, 44, 48].includes(t))) {
-    bledy.push('typyPrzyjscia nie może zawierać 10, 29, 32, 44 ani 48 (klucz, siła, wnętrze, sabotaż, blokada)');
+// Tylko udane otwarcia z możliwą identyfikacją osoby. Bez: klucza mechanicznego (10),
+// siły (29), otwarcia od środka (32), alarmów, nieudanych prób i podwójnej autoryzacji 77–83.
+const DOZWOLONE_TYPY = [1, 4, 7, 8, 9, 12, 49, 55, 57, 67, 75, 76, 84, 85, 92];
+const niedozwolone = typyPrzyjscia.filter(t => !DOZWOLONE_TYPY.includes(t));
+if (niedozwolone.length) {
+    bledy.push(`typyPrzyjscia: niedozwolone typy ${niedozwolone.join(', ')} – dozwolone: ${DOZWOLONE_TYPY.join(', ')}`);
 }
 
 const listaOsob = Array.isArray(config.osoby) ? config.osoby : [];
@@ -89,7 +106,7 @@ if (bledy.length) {
     return null;
 }
 
-flow.set('config', { lockId, maksWiekMinut, typyPrzyjscia, osoby });
+flow.set('config', { lockId, lockMac, maksWiekMinut, typyPrzyjscia, osoby });
 node.status({ fill: lockId ? 'green' : 'yellow', shape: 'dot',
-    text: `${klucze.length}/10 osób` + (lockId ? `, zamek ${lockId}` : ', UWAGA: brak lockId') });
+    text: `${klucze.length}/10 osób` + (lockId ? `, zamek ${lockId}` + (lockMac ? ' + MAC' : '') : ', TRYB NAUKI (brak lockId)') });
 return null;

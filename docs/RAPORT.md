@@ -151,7 +151,8 @@ Node-RED z gotowym flow z tego repozytorium. Szczegóły w [INSTRUKCJA-NODE-RED.
 **Drzwi i alarm**
 - Nie może istnieć żadna ścieżka z KNX do „otwórz drzwi”. Zwykłe KNX TP nie ma uwierzytelniania, więc każdy z dostępem do magistrali mógłby wstrzyknąć telegram.
 - Nie rozbrajaj alarmu automatycznie po otwarciu. Zamiast tego skróć czas wejścia lub wyślij powiadomienie, albo użyj certyfikowanej integracji dostępu w centrali alarmowej.
-- Sprawdzaj `lockId`, stosuj długi losowy sekret w adresie i nigdy nie reaguj na typ 10 ani 29.
+- Callback TTLock nie ma podpisu, tokenu ani znacznika czasu do weryfikacji. Chronią go razem: długi losowy sekret w adresie, sprawdzenie `lockId` i `lockMac` oraz tryb nauki, gdy `lockId` nie jest ustawione.
+- Nigdy nie reaguj na typ 10 ani 29, ani na 77–83 (podwójna autoryzacja: drzwi nadal zamknięte).
 
 **RODO**
 - W prywatnym domu ma zastosowanie wyłączenie domowe, choć interpretowane wąsko.
