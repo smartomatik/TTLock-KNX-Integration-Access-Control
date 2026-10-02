@@ -76,8 +76,9 @@ Edytor nie jest wystawiony do internetu, więc brak aktualizacji nie jest ryzyki
 **Świadoma aktualizacja Node-RED (np. co 1–2 lata):**
 1. Zrób kopię zapasową (niżej).
 2. Docker: zmień wersję w `docker-compose.yml`, uruchom `docker compose pull node-red && docker compose up -d node-red`. Pi: uruchom ponownie skrypt instalacyjny z kroku 5.
-3. Kliknij wszystkie przyciski TEST i sprawdź log oraz reakcję KNX.
-4. Jeśli coś nie działa, przywróć poprzednią wersję i kopię.
+3. Przed aktualizacją na obiekcie uruchom na swoim komputerze testy end-to-end z nową wersją ([tests/e2e/](../tests/e2e/README.md)).
+4. Po aktualizacji kliknij wszystkie przyciski TEST i sprawdź log oraz reakcję KNX.
+5. Jeśli coś nie działa, przywróć poprzednią wersję i kopię.
 
 ## Kopia zapasowa i odtworzenie
 

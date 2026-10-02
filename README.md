@@ -39,6 +39,7 @@ Czytnik UL ──BLE──► Bramka (SX / TTLock G2/G6) ──Wi-Fi──► Ch
 | [docs/UTRZYMANIE.md](docs/UTRZYMANIE.md) | Plan pracy na 5 lat: co działa automatycznie, ryzyka, aktualizacje, kopie zapasowe, coroczny przegląd |
 | [node-red/src/](node-red/src/) i [node-red/build-flow.py](node-red/build-flow.py) | Kod źródłowy węzłów i generator flow (dla osób zmieniających kod) |
 | [tests/](tests/) | 63 testy logiki flow (`node tests/test-flow.js`) i 13 testów skryptu (`python3 tests/test_ttlock_test.py`), bez instalacji i bez sieci |
+| [tests/e2e/](tests/e2e/) | 41 testów end-to-end na prawdziwym Node-RED i knx-ultimate z emulatorem interfejsu KNX IP |
 | [docs/RAPORT.md](docs/RAPORT.md) | Raport wykonalności: dane z zamka, ograniczenia, porównanie rozwiązań KNX, bezpieczeństwo, RODO |
 
 ## Wymagania w skrócie
